@@ -1,0 +1,5512 @@
+#include <windows.h>   
+#include <time.h>
+#include <conio.h>
+#include <string.h>
+#include <stdio.h>
+#include <math.h>
+
+/**************************************************/
+FILE* fl0, * fl1, * fl2, * fl3, * fl4, * f116, * f1stress, * f1failure; *fl9;
+/*------------------------------------------------*/
+LRESULT CALLBACK WindowFunc(HWND, UINT, WPARAM, LPARAM);
+/*------------------------------------------------*/
+/* name of window class                           */
+char    szWinName[] = "MyWin";
+char    ch;
+/*------------------------------------------------*/
+/* holds output strings  long x  long y           */
+char    str[255];
+POINT  vert[200];
+/*------------------------------------------------*/
+/* screen dimensions                              */
+int     maxX;
+int     maxY;
+/*------------------------------------------------*/
+HWND		 hwnd;    /* Storage For Window Handle  */
+/*------------------------------------------------*/
+/* handle of memory DC                            */
+HDC     memdc;
+/*------------------------------------------------*/
+/* handle of compatible bitmap                    */
+HBITMAP hbit;
+/*------------------------------------------------*/
+/* handle of brushes                              */
+HBRUSH  hnewbrush;
+HBRUSH  hOldbrush;
+HBRUSH  hbrush[11];
+/*------------------------------------------------*/
+/* create pens                  handle of old pen */
+HPEN    hOldpen;
+HPEN    hpen[6];
+/*------------------------------------------------*/
+/* store the font handles                         */
+HFONT   holdf;
+HFONT   hnewf1;
+HFONT   hnewf2;
+/*------------------------------------------------*/
+HDC            hdc;
+PAINTSTRUCT    paintstruct;
+
+/*------------------------------------------------*/
+/* h: x1  y1  x2  y2  n1  n2  e0  t0  f0  of bolt */
+/* n1 n2 carry block number        f0 pre-tension */
+/* h[n4+1][10]                                    */
+double** h;
+/**************************************************/
+/* m : 1-6 i1 j1 j2  j1 i1 i2 m[][0]=0 v-e =1 v-v */
+/* m[n1*11+1][7]                                  */
+long** m;
+/*------------------------------------------------*/
+/* m1: 1-6 i1 j1 j2 j1 i1 i2     0 joint material */
+/* m1[n1*11+1][7]                                 */
+long** m1;
+/*------------------------------------------------*/
+/* mm: block index of m m0  0 start 1 end block i */
+/* mm[n1+1][2]                                    */
+long** mm;
+/*------------------------------------------------*/
+/* m0: open-close flag of contact poits           */
+/* m0: 1 previous-flag             2 current-flag */
+/* m0: 3 save flag  4 contact transfer  0 tension */
+/* m0[n1*11+1][5]                                 */
+long** m0;
+/*------------------------------------------------*/
+/* o : 0 total normal dspl for pre-displacements  */
+/* o : 1 total shear dspl     normal dspl of m0=3 */
+/* o : 2 contact edge ratio   transfered if close */
+/* o : 3 total normal dspl of this iteration      */
+/* o : 3 m0=3 normal dspl of other spring diff o1 */
+/* o : 4 total shear  dspl of this iteration      */
+/* o : 5 cohesion length                  save o2 */
+/* o[n1*11+1][6]                                  */
+
+double** o;
+/**************************************************/
+/* k : index of a         2*block contact + 20*n1 */
+/* k : reserved positions for non-zero storage    */
+/* k[n1*40+1]                                     */
+long* k;
+/*------------------------------------------------*/
+/* k1: index of a       for lower triangle k df08 */
+/* k1: reserved positions for non-zero storage    */
+/* k1[n1*40+1]                                    */
+long* k1;
+/*------------------------------------------------*/
+/* kk: working array in df08 for k and index of k */
+/* kk[n1+1]                                       */
+long* kk;
+/*------------------------------------------------*/
+/* k2: i old block number k2[i] new block number  */
+/* k2[n1+1]                                       */
+long* k2;
+/*------------------------------------------------*/
+/* k3: i new block number k3[i] old number df08   */
+/* k3[n1+1]                                       */
+long* k3;
+/**************************************************/
+/* k4: index of u0                >=2 time points */
+/* k4: 0 start of point i        1 end of point i */
+/* k4[nf+nl+1][2]                                 */
+long** k4;
+/*------------------------------------------------*/
+/* g : x y n u v of fixed measured load points    */
+/* g[np+1][6]                                     */
+double** g;
+/*------------------------------------------------*/
+/* c : movement u v r  fixed load measured points */
+/* c[np+1][4]                                     */
+double** c;
+/**************************************************/
+/* f : u v r ex ey gxy     of load terms          */
+/* f : free terms and solution of eguations       */
+/* f[n1+1][7]                                     */
+double** f;
+/*------------------------------------------------*/
+/* r : u v r ex ey gxy of load terms              */
+/* r : save f  before equation solving            */
+/* r[n1+1][7]                                     */
+double** r;
+/*------------------------------------------------*/
+/* c0: xl xu yl yu block box in df03              */
+/* c0: u v r ex ey gxy of sliding friction force  */
+/* c0[n1+1][7]                                    */
+double** c0;
+/*------------------------------------------------*/
+/* z : solution of equations of   u v r ex ey gxy */
+/* z[n1+1][7]                                     */
+double** z;
+/**************************************************/
+/* e0: block material constants                   */
+/* e0: ma wx wy e0 u0 c11 c22 c12 t-weight        */
+/* e0[n1+1][9]                                    */
+double** e0;
+/*------------------------------------------------*/
+/* v0: velosity of u v r ex ey gxy parameters     */
+/* v0[n1+1][7]                                    */
+double** v0;
+/*------------------------------------------------*/
+/* h0: s  sx  sy  sxx  syy  sxy  of blocks        */
+/* h0: old blk number                             */
+/* h0[n1+1][7]                                    */
+double** h0;
+/**************************************************/
+/* n0:   block number of block vertices in d[]    */
+/* n0[oo+1]                                       */
+long* n0;
+/*------------------------------------------------*/
+/* k0: block index of d     0 material number     */
+/* k0: 1 block start        2 block end           */
+/* k0[n1+1][3]                                    */
+long** k0;
+/*------------------------------------------------*/
+/* d : 0 number of joint material of edge i i+1   */
+/* d : 1 x  2 y of coordinates of vertices        */
+/* d[oo+1][3]                                     */
+double** d;
+/*------------------------------------------------*/
+/* u : 1 direction angle 2 angle of vertices in d */
+/* u : 1 x+u             2 y+v   of vertices in d */
+/* u[oo+1][3]                                     */
+double** u;
+/**************************************************/
+/* n : 0 =1 block with measured points =0 without */
+/* n : 1 begin number of k a b for i-th row       */
+/* n : 2 number of k a b       for i-th row       */
+/* n : 3 limit of k element number of i row       */
+/* n[n1+1][4]                                     */
+long** n;
+/*------------------------------------------------*/
+/* v : 6*6 diagnal submatrices of a b             */
+/* v[n1+1][37]                                    */
+double** v;
+/*------------------------------------------------*/
+/* a : general equation coefficent matix          */
+/* a : non-zero 6*6 submatrices according k       */
+/* a[n3+1][37]                                    */
+double** a;
+/*------------------------------------------------*/
+/* b : copy of a                        df20 df24 */
+/* b : non-zero 6*6 submatrices according k       */
+/* b[n3+1][37]                                    */
+double** b;
+/**************************************************/
+/* q0: 0 real max. dspl./ defined max. dspl.      */
+/* q0: 1 accumulated real time utill this step    */
+/* q0: 2 real time interval of this step          */
+/* q0: 3 average dspl.  / defined max. dspl.      */
+/* q0[n5+1][4]                                    */
+double** q0;
+/**************************************************/
+/* u0: t x y of time dependent displacements      */
+/* u0: t x y of time dependent loading            */
+/* u0[nt+1][3]                                    */
+double** u0;
+/**************************************************/
+/* ma wx wy e0 u0 s1 s2 s12 t11 t22 t12 vx vy vr  */
+/* a0[nb+1][14]                                   */
+double** a0;
+/*------------------------------------------------*/
+/* b0: 0 friction       1 cohesion      2 tension */
+/* b0[nj+1][3]                                    */
+double** b0;
+/**************************************************/
+/* e : element matrix                             */
+/* t : deformation matrix of a block              */
+/* q : multiplication of 6*6 submatrix            */
+/* p : line equation                              */
+/* w : window ratio                               */
+/* s : element free term                          */
+double e[7][7];
+double t[7][7];
+double q[7][7];
+double p[7][7];
+double w[14];
+double s[31];
+/*------------------------------------------------*/
+double** cc;
+/*------------------------------------------------*/
+long   ix, iy, ic, iw;
+long    i, i0, i1, i2, i3, i4;
+long   i5, i6, i7, i8, i9, ii;
+long    j, jo, ji, j2, j3, j4;
+long   j5, j6, j7, j8, j9, jj;
+long   k5, k6, k00;
+long    l, l0, l1, l2, l3, l4;
+long   m3, m4, m5, m6, m7, m8, m9, m00;
+long   n1, n2, n3, n4, n5;
+long   n6, n7, n8, n9, nn, n00;
+long   nf, nl, nm, np, nt, nj, nb;
+long   p0, pe, pp;
+long   oo;
+/*------------------------------------------------*/
+double   a1, a2, a3, a4, a9;
+double   b1, b2;
+double   c1;
+double   d0, d1, d2, d3, d4, d5, d9, dd;
+double   ee, e1, e2, e3, e4, e5, e6;
+double   ff, f0, f1, f2;
+double   gg, g0, g1, g2, g3, g4, g6, g7;
+double   hh, h1, h2, h3, h4, h5;
+double   o0, o1, o2;
+double   p1, p2, p3, p4, p5, p6, p7, p8;
+double   q1, q2, qq;
+double   rr, r1;
+double   s0, s1, s2, s3, s4;
+double   t0, tt, t1, t2, t3;
+double   u1, u2, u3;
+double   v1, v2;
+double   w0, w1, w2, w3, w4, w6, w7;
+double    x, x0, x10;
+double   x1, x2, x3, x4, x5, x6, x7, x8, x9;
+double    y, yo, y10;
+double   yi, y2, y3, y4, y5, y6, y7, y8, y9;
+double   xx, yy, zz;
+char      aa[255], ac[80], bc[80];
+char      dc[80];
+
+double   c11, c22, c12, ll;
+double   hh1, averEdgeLen;
+//double   *knMat;
+time_t  startT, finishT;
+/*------------------------------------------------*/
+/* n1: number of blocks                           */
+/* n2: number of contacts                         */
+/* n3: number of 6*6 matrices of a                */
+/* n4: number of bolt or cable elements           */
+/* n5: number of time steps                       */
+/* n6: number of previous contacts                */
+/* n7: number of first dimension                  */
+/* n8: number of second dimension                 */
+/* n9: number of iterations                       */
+/*------------------------------------------------*/
+/* nf: number of fixed points                     */
+/* nl: number of load  points                     */
+/* nm: number of measured points                  */
+/* nb: number of block materials                  */
+/* nj: number of joint materials                  */
+/* nt: number of input time points                */
+/* np: number of special points   = nf+nl+nm      */
+/**************************************************/
+
+/**************************************************/
+/* df01: input geometric data                     */
+/**************************************************/
+void df01()
+{
+	void dist();
+	void area();
+	void angl();
+	/*------------------------------------------------*/
+	fl0 = fopen("ff.c", "r");                
+	fscanf(fl0, "%s %s %s", ac, bc, aa);         
+	fclose(fl0);                                
+	/*------------------------------------------------*/
+	/* nn: couter of time steps                       */
+	/* p0: post script output -- unused currently     */
+	/* n9: total iteration times                      */
+	/* m9: iterations in one time step                */
+	/* k6: 1 output subrouting number                 */
+	//fl0 = fopen("data", "w");                        
+	char filetemp[80] = "data_";
+	strcat(filetemp, ac);
+	fl0 = fopen(filetemp, "w");
+	time(&startT);  
+	fprintf(fl0, "start time of the computation:  %s\n", ctime(&startT));
+	fl9 = fopen("time", "w");
+	fprintf(fl0, "%d %d \n", maxX, maxY);
+	/*------------------------------------------------*/
+	p0 = 0;
+	dd = 3.1415926535 / 180;   
+	k6 = 0;
+	ic = 2;
+	iw = 0;
+	/**************************************************/
+	/* n1   number of blocks                          */
+	/* n4   number of bolts                           */
+	/* oo   number of total vertices of d             */
+	/*------------------------------------------------*/
+	/* nf   fixed points                              */
+	/* nl   loading points                            */
+	/* nm   measured points                           */
+	/**************************************************/
+	fl2 = fopen(ac, "r");               
+	fscanf(fl2, "%d %d %d", &n1, &n4, &oo);  
+	fscanf(fl2, "%d %d %d", &nf, &nl, &nm);  
+	fprintf(fl0, "block          number %d                  \n", n1); 
+	fprintf(fl0, "bolt           number %d                  \n", n4); 
+	fprintf(fl0, "block   vertex number %d                  \n", oo); 
+	fprintf(fl0, "fixed    point number %d                  \n", nf);
+	fprintf(fl0, "loading  point number %d                  \n", nl); 
+	fprintf(fl0, "measured point number %d                  \n", nm); 
+	if (n1 <= 300)  fprintf(fl0, "block number %d direct    \n", n1); 
+	if (n1 > 300)  fprintf(fl0, "block number %d iteration \n", n1); 
+	/*------------------------------------------------*/
+	/* h: x1  y1  x2  y2  n1  n2  e0  t0  f0  of bolt */
+	/* n1 n2 carry block number        f0 pre-tension */
+	/* h[n4+1][10]                                    */  
+	n7 = n4 + 1;
+	n8 = 10;
+	h = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  h[i] = (double*)malloc(sizeof(double) * n8); 
+	/**************************************************/
+	/* m : 1-6 i1 j1 j2  j1 i1 i2 m[][0]=0 v-e =1 v-v */
+	/* m[n1*11+1][7]                                  */     //
+	n7 = 11 * n1 + 1;
+	if ((oo - 4 * n1) > 4 * n1) n7 = (11 * (oo - 4 * n1)) / 4;
+	n8 = 7;
+	m = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i)  m[i] = (long*)malloc(sizeof(long) * n8); 
+	/*------------------------------------------------*/
+	/* m1: 1-6 i1 j1 j2 j1 i1 i2     0 joint material */
+	/* m1[n1*11+1][7]                                 */
+	n7 = 11 * n1 + 1;
+	if ((oo - 4 * n1) > 4 * n1) n7 = (11 * (oo - 4 * n1)) / 4;
+	n8 = 7;
+	m1 = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i) m1[i] = (long*)malloc(sizeof(long) * n8); 
+	/*------------------------------------------------*/
+	/* mm: block index of m m0  0 start 1 end block i */
+	/* mm[n1+1][2]                                    */
+	n7 = n1 + 1;
+	n8 = 2;
+	mm = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i) mm[i] = (long*)malloc(sizeof(long) * n8); 
+	/*------------------------------------------------*/
+	/* m0: open-close flag  of contact poits          */
+	/* m0: 1 previous-flag         2 current-flag     */
+	/* m0: 3 save flag  4 contact transfer  0 tension */
+	/* m0[n1*11+1][5]                                 */
+	n7 = 11 * n1 + 1;
+	if ((oo - 4 * n1) > 4 * n1) n7 = (11 * (oo - 4 * n1)) / 4;
+	n8 = 6;   
+	m0 = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i) m0[i] = (long*)malloc(sizeof(long) * n8);
+	/*------------------------------------------------*/
+	/* o : 0 total normal dspl for pre-displacements  */
+	/* o : 1 total shear dspl     normal dspl of m0=3 */
+	/* o : 2 contact edge ratio   transfered if close */
+	/* o : 3 total normal dspl of this iteration      */
+	/* o : 3 m0=3 normal dspl of other spring diff o1 */
+	/* o : 4 total shear  dspl of this iteration      */
+	/* o : 5 cohesion length                  save o2 */
+	/* o[n1*11+1][6]                                  */
+	
+	n7 = 11 * n1 + 1;
+	if ((oo - 4 * n1) > 4 * n1) n7 = (11 * (oo - 4 * n1)) / 4;
+	n8 = 6 + 2;
+	o = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  o[i] = (double*)malloc(sizeof(double) * n8);
+	/**************************************************/
+	/* k : index of a         2*block contact + 20*n1 */
+	/* k : reserved positions for non-zero storage    */
+	/* k[n1*40+1]                                     */
+	n7 = n1 * 40 + 1;
+	k = (long*)malloc(sizeof(long) * n7);   
+	/*------------------------------------------------*/
+	/* k1: index of a       for lower triangle k df08 */
+	/* k1: reserved positions for non-zero storage    */
+	/* k1[n1*40+1]                                    */
+	n7 = n1 * 40 + 1;
+	k1 = (long*)malloc(sizeof(long) * n7);
+	/*------------------------------------------------*/
+	/* kk: working array in df08 for k and index of k */
+	/* kk[n1+1]                                       */
+	n7 = n1 + 1;
+	kk = (long*)malloc(sizeof(long) * n7); 
+	/*------------------------------------------------*/
+	/* k2: i old block number k2[i] new block number  */
+	/* k2[n1+1]                                       */
+	n7 = n1 + 1;
+	k2 = (long*)malloc(sizeof(long) * n7); 
+	/*------------------------------------------------*/
+	/* k3: i new block number k3[i] old number df08   */
+	/* k3[n1+1]                                       */
+	n7 = n1 + 1;
+	k3 = (long*)malloc(sizeof(long) * n7);  
+	/**************************************************/
+	/* k4: index of u0               >=2 time points  */
+	/* k4: 0 start of point i   1 end of point i      */
+	/* k4[nf+nl+1][2]                                 */ 
+	n7 = nf + nl + 1;
+	n8 = 2;
+	k4 = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i)  k4[i] = (long*)malloc(sizeof(long) * n8);
+	/*------------------------------------------------*/
+	/* g : x y n u v of fixed measured load points    */  
+	/* g[np+1][6]                                     */
+	np = nf + nl + nm;    
+	n7 = np + 1;
+	n8 = 6;
+	g = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  g[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	/* c : movement u v r  fixed load measured points */
+	/* c[np+1][4]                                     */
+	n7 = np + 1;
+	n8 = 4;
+	c = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  c[i] = (double*)malloc(sizeof(double) * n8);
+	/**************************************************/
+	/* f : u v r ex ey gxy     of load terms          */
+	/* f : free terms and solution of eguations       */
+	/* f[n1+1][7]                                     */
+	n7 = n1 + 1;
+	n8 = 10;
+	f = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  f[i] = (double*)malloc(sizeof(double) * n8); 
+	/*------------------------------------------------*/
+	/* r : u v r ex ey gxy of load terms              */
+	/* r : save f  before equation solving            */
+	/* r[n1+1][7]                                     */
+	n7 = n1 + 1;
+	n8 = 7;
+	r = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  r[i] = (double*)malloc(sizeof(double) * n8); 
+	/*------------------------------------------------*/
+	/* c0: xl xu yl yu block box in df03              */
+	/* c0: u v r ex ey gxy of sliding friction force  */
+	/* c0[n1+1][7]                                    */
+	n7 = n1 + 1;
+	n8 = 7;
+	c0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) c0[i] = (double*)malloc(sizeof(double) * n8); 
+	/*------------------------------------------------*/
+	/* z : solution of equations of   u v r ex ey gxy */
+	/* z[n1+1][7]                                     */
+	n7 = n1 + 1;
+	n8 = 7;
+	z = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  z[i] = (double*)malloc(sizeof(double) * n8);  
+	/**************************************************/
+	/* e0: block material constants                   */
+	/* e0: ma wx wy e0 u0 c11 c22 c12 t-weight        */
+	/* e0[n1+1][9]                                    */
+	n7 = n1 + 1;
+	n8 = 9;
+	e0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) e0[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	/* v0: velocity of u v r ex ey gxy parameters     */
+	/* v0[n1+1][7]                                    */
+	n7 = n1 + 1;
+	n8 = 7;
+	v0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) v0[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	/* h0: s  sx  sy  sxx  syy  sxy  of blocks        */
+	/* h0: old blk number                             */
+	/* h0[n1+1][7]                                    */ 
+	n7 = n1 + 1;
+	n8 = 7;
+	h0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) h0[i] = (double*)malloc(sizeof(double) * n8);
+	/**************************************************/
+	/* n0: block number of block vertices in d[]      */
+	/* n0[oo+1]                                       */ 
+	n7 = oo + 1;
+	n0 = (long*)malloc(sizeof(long) * n7);           
+	/*------------------------------------------------*/
+	/* k0: block index of d     0 material number     */
+	/* k0: 1 block start        2 block end           */
+	/* k0[n1+1][3]                                    */ 
+	n7 = n1 + 1;
+	n8 = 3;
+	k0 = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i) k0[i] = (long*)malloc(sizeof(long) * n8);
+	/*------------------------------------------------*/
+	/* d : 0 number of joint material of edge i i+1   */  
+	/* d : 1 x  2 y of coordinates of vertices        */ 
+	/* d[oo+1][3]                                     */  
+	n7 = oo + 1;
+	n8 = 3;
+	d = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  d[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	/* u : 1 direction angle 2 angle of vertices in d */
+	/* u : 1 x+u             2 y+v   of vertices in d */  
+	/* u[oo+1][3]                                     */
+	n7 = oo + 1;
+	n8 = 3;
+	u = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  u[i] = (double*)malloc(sizeof(double) * n8);
+	/**************************************************/
+	/* n : 0 =1 block with measured points =0 without */
+	/* n : 1 begin number of k a b for i-th row       */
+	/* n : 2 number of k a b       for i-th row       */
+	/* n : 3 limit of k element number of i row       */
+	/* n[n1+1][4]                                     */
+	n7 = n1 + 1;
+	n8 = 4;
+	n = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i)  n[i] = (long*)malloc(sizeof(long) * n8);
+	/*------------------------------------------------*/
+	/* v : 6*6 diagnal submatrices of a b             */
+	/* v[n1+1][37]                                    */
+	n7 = n1 + 1;
+	n8 = 37;
+	v = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) v[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+
+
+	/**************************************************/
+	/* n1   number of blocks                          */
+	/* n4   number of bolts                           */
+	/* oo   number of total vertices of d             */
+	/* nf   fixed points                              */
+	/* nl   loading points                            */
+	/* nm   measured points                           */
+	/*------------------------------------------------*/
+	/* enter data from file                           */
+	/* 0 material number  1 block start   2 block end */
+	for (i = 1; i <= n1; i++)  
+	{
+		fscanf(fl2, "%d %d %d", &k0[i][0], &k0[i][1], &k0[i][2]); 
+	}  /*  i  */
+
+	/*------------------------------------------------*/
+	/* 0:joint maerial    1:x   2:y of block vertices */
+	for (i = 1; i <= oo; i++)  
+	{
+		fscanf(fl2, "%lf %lf %lf", &d[i][0], &d[i][1], &d[i][2]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* h: x1  y1  x2  y2  n1  n2  e0  t0  f0  of bolt */
+	/* n1 n2 carry block number        f0 pre-tension */
+	for (i = 1; i <= n4; i++)  
+	{
+		fscanf(fl2, "%lf %lf %lf", &h[i][1], &h[i][2], &h[i][3]);
+		fscanf(fl2, "%lf %lf %lf", &h[i][4], &h[i][5], &h[i][6]);
+		fscanf(fl2, "%lf %lf %lf", &h[i][7], &h[i][8], &h[i][9]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* x  y  n  of fixed loading measured points      */
+	for (i = 1; i <= np; i++)  
+	{
+		fscanf(fl2, "%lf %lf %lf", &g[i][1], &g[i][2], &g[i][3]); 
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* m7 output step number to dgdt                  */
+	fscanf(fl2, "         %d", &m7);   
+	fclose(fl2);                                              
+	/**************************************************/
+	/* n[i][0]=1 block i has measured    points =0 no */
+	for (i = 1; i <= n1; i++)
+	{
+		n[i][0] = 0;                   
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = nf + nl + 1; i <= nf + nl + nm; i++)
+	{
+		i1 = (long)g[i][3];
+		n[i1][0] = 1;                 
+	}  /*  i  */
+	/**************************************************/
+	/* change d to have previous vertix of 1st vertix */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		d[i1 - 1][0] = d[i2][0];  
+		d[i1 - 1][1] = d[i2][1];  
+		d[i1 - 1][2] = d[i2][2];
+	}  /*  i  */
+	/**************************************************/
+	/* compute window limits                          */
+	if (k6 == 1)  fprintf(fl0, "--- 1000--- \n");
+	e[1][1] = d[1][1];
+	e[1][2] = d[1][1];
+	e[2][1] = d[1][2];
+	e[2][2] = d[1][2];
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1; j <= i2; j++)
+		{
+			if (e[1][1] > d[j][1])  e[1][1] = d[j][1];   
+			if (e[1][2] < d[j][1])  e[1][2] = d[j][1];   
+			if (e[2][1] > d[j][2])  e[2][1] = d[j][2];   
+			if (e[2][2] < d[j][2])  e[2][2] = d[j][2];   
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* v1 : 1.0--1.3 ratio of window                  */
+	v1 = 1.05;
+	e[3][1] = (e[1][2] - e[1][1]) / 2;  
+	e[3][2] = (e[2][2] - e[2][1]) / 2;    
+	e[4][1] = (e[1][1] + e[1][2]) / 2;  
+	e[4][2] = (e[2][1] + e[2][2]) / 2;  
+	w0 = e[3][2] * v1;
+	if (e[3][1] > 1.3 * e[3][2]) w0 = e[3][1] * v1 / 1.3;  
+	w[1] = e[4][1] - w0 * 1.3;
+	w[3] = e[4][1] + w0 * 1.3;
+	w[2] = e[4][2] - w0;
+	w[4] = e[4][2] + w0;       
+	/**************************************************/
+	/* initiate n0 as block number index of d and u   */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1 - 1; j <= i2 + 3; j++)
+		{
+			n0[j] = i;
+		}  /*  j  */
+	}  /*  i  */    
+	/**************************************************/
+	/* compute average block area                     */
+	area();
+	w3 = 0;
+	for (i = 1; i <= n1; i++)
+	{
+		w3 += h0[i][1];
+		h0[i][0] = h0[i][1];  
+	}  /*  i  */
+	w3 = w3 / n1;                
+	fprintf(fl0, "###### average  block  area ###### %lf \n", w3); 
+	/**************************************************/
+	/* compute shortest edge                          */
+	w1 = (d[2][1] - d[1][1]) * (d[2][1] - d[1][1])
+		+ (d[2][2] - d[1][2]) * (d[2][2] - d[1][2]);
+	ii = 0; averEdgeLen = 0; 
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = k0[i][1]; j <= k0[i][2]; j++)
+		{
+			a1 = (d[j + 1][1] - d[j][1]) * (d[j + 1][1] - d[j][1])
+				+ (d[j + 1][2] - d[j][2]) * (d[j + 1][2] - d[j][2]);
+			ii = ii + 1;
+			averEdgeLen = averEdgeLen + sqrt(a1);
+
+			if (w1 > a1) w1 = a1;    
+		}  /*  j  */
+	}  /*  i  */
+	w1 = sqrt(w1);     
+	averEdgeLen = averEdgeLen / ii; 
+
+
+	fprintf(fl0, "###### minimum  edge length ###### %lf \n", w1);
+	/**************************************************/
+	/* compute shortest edge node distance     w2<=w1 */
+	/* l-j=i2-i1 => l=i2 l+1=i2+1 j=i1     j l+1 same */ 
+	w2 = (d[2][1] - d[1][1]) * (d[2][1] - d[1][1])
+		+ (d[2][2] - d[1][2]) * (d[2][2] - d[1][2]);
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1; j <= i2; j++)
+		{
+			for (l = i1; l <= i2; l++)
+			{
+
+				if (l == j) goto a101;
+				if (l + 1 == j) goto a101;
+				if (l - j == i2 - i1) goto a101;
+				x1 = d[j][1];
+				yi = d[j][2];
+				x2 = d[l][1];
+				y2 = d[l][2];
+				x3 = d[l + 1][1];
+				y3 = d[l + 1][2];
+				dist();
+				if (w2 > d5)  w2 = d5;   
+			a101:;
+			}  /*  l  */
+		}  /*  j  */
+	}  /*  i  */
+	x3 = w2;
+	fprintf(fl0, "###### minimum v-e distance ###### %lf \n", w2);
+	/**************************************************/
+	/* compute minimum block angle                    */
+	angl();
+	w4 = 180;
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1; j <= i2; j++)
+		{
+			d5 = u[j][2];
+			if (w4 > d5)  w4 = d5;   
+		}  /*  j  */
+	}  /*  i  */
+	fprintf(fl0, "###### minimum block  angle ###### %lf \n", w4);
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df02: input physical data                      */
+/**************************************************/
+void df02()
+{
+	void cons();
+	if (k6 == 1)  fprintf(fl0, "--- 2000--- \n");
+	/*------------------------------------------------*/
+	/* pp=0 direct     variable g0 by penetration  f2 */
+	/* pp=1 iteration  variable g0 by penetration  f2 */
+	pp = 0;     //
+	if (n1 > 300)  pp = 1;   
+	fl1 = fopen(bc, "r");     
+	/*------------------------------------------------*/
+	/* control integer number                         */
+	fprintf(fl0, "enter 0 or 1, 0-statics 1-dynamics \n");
+	fscanf(fl1, "%lf   ", &gg);                           
+	fprintf(fl0, "%lf \n", gg);                            
+	fprintf(fl0, "enter number of time steps (1-100)\n");
+	fscanf(fl1, "%d   ", &n5);                        
+	fprintf(fl0, "%d \n", n5);                      
+	fprintf(fl0, "enter number of block materials   \n");
+	fscanf(fl1, "%d   ", &nb);                
+	fprintf(fl0, "%d \n", nb);               
+	fprintf(fl0, "enter number of joint materials   \n");
+	fscanf(fl1, "%d    ", &nj);                 
+	fprintf(fl0, "%d  \n", nj);                
+	/*------------------------------------------------*/
+	/* control real number constants                  */
+	fprintf(fl0, "enter max. allowable step displacement divided \n");
+	fprintf(fl0, "by half height of whole block mesh (.02-.0001) \n");
+	fscanf(fl1, "%lf   ", &g2);   
+	fprintf(fl0, "%lf \n", g2); 
+	fprintf(fl0, "enter upper limit of time interval per step    \n");
+	fprintf(fl0, "enter 0 choose automatic time step chosen      \n");
+	fscanf(fl1, "%lf   ", &g1); 
+	fprintf(fl0, "%lf \n", g1);  
+	fprintf(fl0, "enter stiffness of contact spring              \n");
+	fprintf(fl0, "enter 0 choose automatic spring stiffness      \n");
+	fscanf(fl1, "%lf   ", &g0);  
+	fprintf(fl0, "%lf \n", g0);  
+	/*------------------------------------------------*/
+	/* dynamic diplacement and loading input          */
+	/* k4[i][0] >= 2                                  */
+	fprintf(fl0, "enter time step number >=2 for each fixed load \n");
+	fprintf(fl0, "point i to have time dependent (t u v) t=time  \n");
+	fprintf(fl0, "enter 0 to set time step 2 u=0 v=0 all time    \n");
+	for (i = 1; i <= nf + nl; i++)
+	{
+		fscanf(fl1, "%d   ", &k4[i][0]);  
+		fprintf(fl0, "%d \n", k4[i][0]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* k4[i][0]=0 fixed points         c[i][0]=1 flag */
+	for (i = 1; i <= nf + nl; i++)
+	{
+		c[i][0] = 0;
+		if (k4[i][0] == 0)   c[i][0] = 1; 
+		if (k4[i][0] == 0)   k4[i][0] = 2; 
+	}  /*  i  */
+
+	/*------------------------------------------------*/
+	/* k4[i][0] start                   k4[i][1]  end */ 
+	i1 = 0;
+	for (i = 1; i <= nf + nl; i++)
+	{
+		i1 += k4[i][0];
+		k4[i][1] = i1;
+		k4[i][0] = k4[i][1] - k4[i][0] + 1;
+	}  /*  i  */
+	nt = k4[nf + nl][1];  
+
+	/**************************************************/  //
+	/* q0: 0 real max. dspl./ defined max. dspl.      */
+	/* q0: 1 accumulated real time utill this step    */
+	/* q0: 2 real time interval of this step          */
+	/* q0: 3 average dspl.  / defined max. dspl.      */
+	/* q0[n5+1][4]                                    */ 
+	n7 = n5 + 1;
+	n8 = 4;
+	q0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) q0[i] = (double*)malloc(sizeof(double) * n8);
+	q0[0][1] = 0;
+	q0[0][2] = 0;   
+	/**************************************************/
+	/* u0: t x y of time dependent displacements      */
+	/* u0: t x y of time dependent loading            */
+	/* u0[nt+1][3]                                    */  
+	n7 = nt + 1;
+	n8 = 3;
+	u0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) u0[i] = (double*)malloc(sizeof(double) * n8);
+	/**************************************************/
+	/* ma wx wy e0 u0 s1 s2 s12 t11 t22 t12 vx vy vr  */ 
+	/* a0[nb+1][13]                                   */
+	n7 = nb + 1;
+	n8 = 14;
+	a0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) a0[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	/* b0: 0 friction       1 cohesion      2 tension */
+	/* b0[nj+1][3]                                    */  
+	n7 = nj + 1;
+	n8 = 3;
+	b0 = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) b0[i] = (double*)malloc(sizeof(double) * n8);
+	/**************************************************/
+	/* u0: t x y of time dependent displacements      */
+	/* u0: t x y of time dependent loading            */
+	/* u0[nt+1][3]  c[i][0]=1 step=2 x=0 y=0 all time */
+	fprintf(fl0, "enter time depending movement & loads \n");
+	i1 = 0;
+	for (i = 1; i <= nf + nl; i++)
+	{
+		if (c[i][0] < 0.5) goto a201;
+		i1 += 1;
+		u0[i1][0] = 0;
+		u0[i1][1] = 0;
+		u0[i1][2] = 0;
+		i1 += 1;
+		u0[i1][0] = 1000000;
+		u0[i1][1] = 0;
+		u0[i1][2] = 0;
+		goto a202;
+	a201:;
+		for (j = k4[i][0]; j <= k4[i][1]; j++)
+		{
+			i1 += 1;
+			fscanf(fl1, "%lf %lf %lf   ", &u0[i1][0], &u0[i1][1], &u0[i1][2]); 
+			fprintf(fl0, "%lf %lf %lf \n", u0[i1][0], u0[i1][1], u0[i1][2]);
+		}  /*  j  */
+	a202:;
+	}  /*  i  */
+	/*------------------------------------------------*/  
+	/* ma wx wy e0 u0 s1 s2 s12 t11 t22 t12 vx vy vr  */  
+	fprintf(fl0, "enter block material constants \n");
+	for (i = 1; i <= nb; i++)
+	{
+		fprintf(fl0, "block material %d \n", i);
+		for (j = 0; j <= 13; j++)
+		{
+			fscanf(fl1, "%lf   ", &a0[i][j]);
+			fprintf(fl0, "%lf \n", a0[i][j]);
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* friction-angle   cohesion   tension-strength   */
+	fprintf(fl0, "enter joint material constants \n");
+	for (i = 1; i <= nj; i++)
+	{
+		fscanf(fl1, "%lf %lf %lf   ", &b0[i][0], &b0[i][1], &b0[i][2]);
+		fprintf(fl0, "%lf %lf %lf \n", b0[i][0], b0[i][1], b0[i][2]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* factor of over relaxation qq                   */
+	fprintf(fl0, "enter factor of SOR (1 -- 2) ? \n");
+	fscanf(fl1, "%lf   ", &qq);   
+	fprintf(fl0, "%lf \n", qq);
+
+
+	fprintf(fl0, "enter 0 1 2 in given order 2:up, 0,1,2 right hand \n");
+	fscanf(fl1, "%d %d %d   ", &i0, &i1, &i2);
+	fprintf(fl0, "%d %d %d \n", i0, i1, i2); 
+	k00 = 1; 
+	if (i0 == 0 && i1 == 0)  k00 = 0;
+	fprintf(fl0, "enter section angle from 0 to 1 axis (deg) ? \n");
+	if (k00 == 1)  fscanf(fl1, "%lf   ", &rr);   
+	if (k00 == 1)  fprintf(fl0, "%lf \n", rr);
+	fclose(fl1);                         
+	/**************************************************/
+	/* coordinate translation of resultant            */
+	/* add two rows 0  in front of earth quike file   */
+	/* gg = 32.174 ft/s^2                             */
+	if (k00 == 0)  goto a203;
+	/* fprintf(fl0,"enter the name of earth quake data file \n ?"); */
+	/* scanf ("%s", aa); */
+	fl4 = fopen(aa, "r"); 
+	fprintf(fl0, "<total step, gravity acceleration g, time interval\n");
+	fscanf(fl4, "%d %lf %lf   ", &m00, &ee, &zz);  
+	fprintf(fl0, "%d %lf %lf \n", m00, ee, zz);
+	/*------------------------------------------------*/
+	n7 = m00 + 1;
+	n8 = 4;
+	cc = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) cc[i] = (double*)malloc(sizeof(double) * n8); 
+	/*------------------------------------------------*/
+	/* change earth quake system to global system     */
+	/* global x: east  y: north  z: up  + static load */
+	fprintf(fl0, "<enter (x,y,z) of earth quake acceleration vector \n");
+	for (i = 0; i < m00; i++)
+	{
+		if (i % 100 == 0)  fprintf(fl0, "%d \n", i);
+		fscanf(fl4, "%lf %lf %lf", &cc[i][i0], &cc[i][i1], &cc[i][i2]);
+		/*------------------------------------------------*/
+		cc[i][1] = cos(rr * dd) * cc[i][0] + sin(rr * dd) * cc[i][1];
+		cc[i][1] *= ee;
+		cc[i][2] *= ee;
+	}  /* i  */
+	cc[m00][0] = 0;
+	cc[m00][1] = 0;
+	cc[m00][2] = 0;
+	fclose(fl4);                              
+	fprintf(fl0, "end of earth quake file reading \n");
+a203:;
+	/**************************************************/
+	fprintf(fl0, "============ end input ============ \n");
+	fprintf(fl0, "number of blocks: %d  \n", n1);
+	fprintf(fl0, "number of steps : %d  \n", n5);
+	fprintf(fl0, "fixed points    : %d  \n", nf);
+	fprintf(fl0, "loading points  : %d  \n", nl);
+	fprintf(fl0, "measured points : %d  \n", nm);
+	fprintf(fl0, "block materials : %d  \n", nb);
+	fprintf(fl0, "joint materials : %d  \n", nj);
+	fprintf(fl0, "time interval   : %lf \n", g1);
+	fprintf(fl0, "step disp. ratio: %lf \n", g2);
+	fprintf(fl0, "###### aver blk area /w0/w0 ###### %lf \n", w3 / w0 / w0);
+	fprintf(fl0, "###### min edge length  /w0 ###### %lf \n", w1 / w0);
+	fprintf(fl0, "###### min v-e distance /w0 ###### %lf \n", w2 / w0);
+	fprintf(fl0, "###### minimum block  angle ###### %lf \n", w4);
+	/*------------------------------------------------*/
+	if (0 == 0) goto db01;
+	fprintf(fl0, "k0[i][0]  k0[i][1]  k0[i][2]\n");
+	for (i = 1; i <= n1; i++)
+	{
+		fprintf(fl0, "%d %d %d\n", k0[i][0], k0[i][1], k0[i][2]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	fprintf(fl0, "d[i][0]   d[i][1]   d[i][2]\n");
+	for (i = 1; i <= oo; i++)
+	{
+		fprintf(fl0, "%lf %lf %lf\n", d[i][0], d[i][1], d[i][2]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	fprintf(fl0, "g[i][1]   g[i][2]   g[i][3]\n");
+	for (i = 1; i <= np; i++)
+	{
+		fprintf(fl0, "%lf %lf %lf\n", g[i][1], g[i][2], g[i][3]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	fprintf(fl0, "k4[i][0]\n");
+	for (i = 1; i <= nf + nl; i++)
+	{
+		fprintf(fl0, "%d\n", k4[i][0]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	fprintf(fl0, "u0[i][0]  u0[i][1]  u0[i][2]\n");
+	for (i = 1; i <= nt; i++)
+	{
+		fprintf(fl0, "%lf %lf %lf\n", u0[i][0], u0[i][1], u0[i][2]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	fprintf(fl0, "a0[i][j]\n");
+	for (i = 1; i <= nb; i++)
+	{
+		for (j = 0; j <= 13; j++)
+		{
+			fprintf(fl0, "%lf\n", a0[i][j]);
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	fprintf(fl0, "b0[i][0]  b0[i][1]  b0[i][2]\n");
+	for (i = 1; i <= nj; i++)
+	{
+		fprintf(fl0, "%lf %lf %lf\n", b0[i][0], b0[i][1], b0[i][2]);
+	}  /*  i  */
+db01:;
+	/**************************************************/
+	/* m4: step    of graphic output                  */
+	/* m5: number  of graphic output                  */
+
+	//f116=fopen("Test.dat","w");
+	//fprintf(f116,"m7=%d   m4=%d\n", m7, m4);
+	//fclose(f116);
+	m4 = floor((double)n5 / (double)m7 - .000001) + 1;    
+
+	m5 = floor((double)n5 / m4 - .000001) + 1;    
+	/*------------------------------------------------*/
+	/* start graphic output df26 df27                 */
+	//fl3 = fopen("dgdt", "w");                 
+	//f1stress = fopen("stressData", "w");               
+	//f1failure = fopen("failureData", "w");                
+	char filetemp[80] = "dgdt_";	strcat(filetemp, ac);
+	fl3 = fopen(filetemp, "w");
+	char filetemp1[80] = "stressData_";	strcat(filetemp1, ac);
+	f1stress = fopen(filetemp1, "w");
+	char filetemp2[80] = "failureData_";	strcat(filetemp2, ac);
+	f1failure = fopen(filetemp2, "w");
+
+	fprintf(fl3, "%d  %d  %d  %d  %d \n", n1, nf + nl + nm, n4, oo, m5);
+	fprintf(fl3, "%lf %lf %lf %lf    \n", w[1], w[3], w[2], w[4]);
+	/*------------------------------------------------*/
+	for (i = 1; i <= n1; i++)
+	{
+		fprintf(fl3, "%d %d \n", k0[i][1], k0[i][2]); 
+	}  /*  i  */
+	/**************************************************/
+	/* a0: ma wx wy e0 u0 s1 s2 st t1 t2 tt vx vy vr  */
+	/* e0: ma wx wy e0 u0 c11 c22 c12 t-weight        */
+	/* v0: velosity of u v r ex ey gxy parameters     */
+	for (i = 1; i <= n1; i++)
+	{
+		if (k0[i][0] < 1)  k0[i][0] = 1;
+		if (k0[i][0] > nb)  k0[i][0] = nb;
+		i1 = k0[i][0];
+		e0[i][0] = a0[i1][0];  
+		e0[i][1] = a0[i1][1];
+		e0[i][2] = a0[i1][2];    
+		e0[i][3] = a0[i1][3];   
+		e0[i][4] = a0[i1][4];   
+		e0[i][5] = a0[i1][5] + (h0[i][3] / h0[i][1]) * a0[i1][8];   //
+		e0[i][6] = a0[i1][6] + (h0[i][3] / h0[i][1]) * a0[i1][9];   //
+		e0[i][7] = a0[i1][7] + (h0[i][3] / h0[i][1]) * a0[i1][10];   //
+		e0[i][8] = a0[i1][0] * h0[i][1];  
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* v0: velocity of u v r ex ey gxy parameters     */
+	/* initial velocity                               */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][0];
+		v0[i][1] = a0[i1][11];  
+		v0[i][2] = a0[i1][12];  
+		v0[i][3] = a0[i1][13];  
+		v0[i][4] = 0;
+		v0[i][5] = 0;
+		v0[i][6] = 0;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* acumulate strains                              */
+	for (i = 1; i <= n1; i++)
+	{
+		f[i][7] = 0;
+		f[i][8] = 0;
+		f[i][9] = 0;  
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* confirm numbers of joint material              */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1 - 1; j <= i2 + 1; j++)
+		{
+			if (d[j][0] < 1)  d[j][0] = 1;
+			if (d[j][0] > nj)  d[j][0] = nj;  
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* movements at fixed load measured points        */
+	for (i = 1; i <= np; i++)
+	{
+		for (j = 1; j <= 3; j++)
+		{
+			c[i][j] = 0; 
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* initial zero for solution in begining          */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			z[i][j] = 0;   
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	cons();
+}
+
+/**************************************************/
+/* df03: mechanical parameters of blocks          */
+/**************************************************/
+void df03()
+{
+	void step();
+	void angl();
+	void mblo();
+	void mjoi();
+	if (k6 == 1)  fprintf(fl0, "--- 3000--- \n");
+	/*------------------------------------------------*/
+	/* step: compute next time interval               */
+	/* angl: material constants of bolts              */
+	/* mblo: material constants of blocks             */
+	/* mjoi: material constants of joints             */
+	step();
+	angl();
+	mblo();
+	mjoi();  
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df04: contact finding by distance criteria     */
+/**************************************************/
+void df04()
+{
+	double sign();
+	if (k6 == 1)  fprintf(fl0, "--- 4000--- \n");
+	/*------------------------------------------------*/
+	/* save contact positions of previous step        */
+	if (nn == 1) goto a401;  
+	for (i = 1; i <= n2; i++)
+	{
+		for (j = 0; j <= 6; j++)
+		{
+			m1[i][j] = m[i][j];
+		}  /*  j  */
+	}  /*  i  */    
+	/*------------------------------------------------*/
+	/* save o2 into o5 and correct o3 o4 for transfer */
+	for (i = 1; i <= n2; i++)
+	{
+		o[i][5] = o[i][2]; 
+		if (m0[i][2] == 1 && m[i][0] == 0) o[i][4] = .0000000000001 * w0 * sign(o[i][4]); 
+		if (m0[i][2] == 0) o[i][3] = 0;   
+		if (m0[i][2] == 0 || m[i][0] == 1) o[i][4] = 0;   
+		m0[i][3] = m0[i][2]; 
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* releas tension or shear locks                  */
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][2] != 2)
+		{
+			m0[i][0] = 0;
+		}
+		if (m0[i][0] != 2)
+		{
+			m0[i][0] = 0;
+		}
+		
+	}  /*  i  */
+	n6 = n2;     
+a401:;
+	/**************************************************/
+	/* if d0 small distance is main contact creteria  */
+	/* c0[][] xl xu yl yu                             */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];  
+		i2 = k0[i][2]; 
+		c0[i][1] = d[i1][1]; 
+		c0[i][2] = d[i1][1];  
+		c0[i][3] = d[i1][2]; 
+		c0[i][4] = d[i1][2];  
+		for (j = i1; j <= i2; j++)
+		{
+			if (c0[i][1] > d[j][1])  c0[i][1] = d[j][1]; 
+			if (c0[i][2] < d[j][1])  c0[i][2] = d[j][1]; 
+			if (c0[i][3] > d[j][2])  c0[i][3] = d[j][2];
+			if (c0[i][4] < d[j][2])  c0[i][4] = d[j][2]; 
+		}  /*  j  */
+	}  /*  i  */
+	/**************************************************/
+	/* contact finding by distance criteria           */
+	/* d0 : normal external    distance for contact   */
+	/* d0 : normal penetration distance for contact   */
+	/* m6 : number of contact vertices                */
+	m6 = 0;                                         
+	/*------------------------------------------------*/
+	/* if two boxes of blocks are near                */
+	for (ii = 1; ii <= n1 - 1; ii++)
+	{
+		for (jj = ii + 1; jj <= n1; jj++)
+		{
+			if (c0[ii][2] + d0 < c0[jj][1]) goto a407;   
+			if (c0[jj][2] + d0 < c0[ii][1]) goto a407;   
+			if (c0[ii][4] + d0 < c0[jj][3]) goto a407;   
+			if (c0[jj][4] + d0 < c0[ii][3]) goto a407;  
+			/*------------------------------------------------*/
+			for (i = k0[ii][1]; i <= k0[ii][2]; i++)
+			{
+				for (j = k0[jj][1]; j <= k0[jj][2]; j++)
+				{
+					x1 = d[i][1];
+					yi = d[i][2];  
+					x2 = d[i + 1][1];
+					y2 = d[i + 1][2];  
+					x3 = d[j][1];
+					y3 = d[j][2];  
+					x4 = d[j + 1][1];
+					y4 = d[j + 1][2];  
+					/*------------------------------------------------*/    
+					/* vi-vj contact                       vi concave */
+					/* 2 v-e contact v_j-e_i+1 e_i       v_j-e_ie_i-1 */
+					if ((x1 - x3) * (x1 - x3) + (yi - y3) * (yi - y3) > d0 * d0) goto a404;  
+					if (u[i][2] < 180 + .0001) goto a402;   
+
+					m6 += 1;              
+					k[m6] = (-1) * j;    
+					k1[m6] = i;                           
+					/*------------------------------------------------*/
+					m6 += 1;              
+					k[m6] = (-1) * j;    
+					k1[m6] = i - 1;    
+
+					if (i == k0[ii][1])  k1[m6] = k0[ii][2];  
+					goto a406;
+					/*------------------------------------------------*/
+					/* vi-vj contact                       vj concave */
+					/* 2 v-e contact v_i-e_j+1 e_j       v_i-e_j e_i-j */    //v_i-e_j e_j-1
+				a402:;
+					if (u[j][2] < 180 + .0001) goto a403;
+					m6 += 1;              
+					k[m6] = (-1) * i;    
+					k1[m6] = j;    
+					/*------------------------------------------------*/
+					m6 += 1;              
+					k[m6] = (-1) * i;   
+					k1[m6] = j - 1;  
+					if (j == k0[jj][1])  k1[m6] = k0[jj][2];
+					goto a406;
+					/*------------------------------------------------*/
+					/* vi-vj contact                angle vi vj <=180 */  
+				a403:;
+					m6 += 1;        
+					k[m6] = i;   
+					k1[m6] = j;    
+					goto a406;
+					/**************************************************/
+					/* (p1 p2): inner  normal of line p1p2            */
+					/* (p3 p4): vector along     line p1p2            */
+				a404:;
+					x5 = (x1 + x2) * .5;
+					y5 = (yi + y2) * .5;  
+					a1 = sqrt((x2 - x1) * (x2 - x1) + (y2 - yi) * (y2 - yi));     
+					p1 = (yi - y2) / a1;
+					p2 = (x2 - x1) / a1;   
+					p3 = (x2 - x1) / a1;
+					p4 = (y2 - yi) / a1;   
+					/*------------------------------------------------*/
+					/* (p5 p6): inner  normal of line p3p4            */
+					/* (p7 p8): vector along     line p3p4            */
+					x6 = (x3 + x4) * .5;
+					y6 = (y3 + y4) * .5;  
+					a2 = sqrt((x4 - x3) * (x4 - x3) + (y4 - y3) * (y4 - y3));    
+					p5 = (y3 - y4) / a2;
+					p6 = (x4 - x3) / a2;   
+					p7 = (x4 - x3) / a2;
+					p8 = (y4 - y3) / a2;   
+					/*------------------------------------------------*/
+					d1 = p5 * (x1 - x6) + p6 * (yi - y6);  
+					d2 = p7 * (x1 - x6) + p8 * (yi - y6);    
+					d3 = p1 * (x3 - x5) + p2 * (y3 - y5);    
+					d4 = p3 * (x3 - x5) + p4 * (y3 - y5);    
+					/*------------------------------------------------*/
+					/* vi - ej+1 j contact       h5=0.4  d0 in dstn() */
+					if ((x1 - x4) * (x1 - x4) + (yi - y4) * (yi - y4) <= d0 * d0) goto a405; 
+					if (fabs(d2) > a2 / 2) goto a405;   
+					if (d1<-d0 || d1>h5 * d0) goto a405;  
+					m6 += 1;             
+					k[m6] = (-1) * i;     
+					k1[m6] = j;     
+					/*------------------------------------------------*/
+					/* vj - ei+1 i contact                            */
+				a405:;
+					if ((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2) <= d0 * d0) goto a406;  
+					if (fabs(d4) > a1 / 2) goto a406;  
+					if (d3<-d0 || d3>h5 * d0) goto a406;   
+					m6 += 1;               
+					k[m6] = (-1) * j;    
+					k1[m6] = i;     
+					/*------------------------------------------------*/
+				a406:;
+				}  /*  j  */
+			}  /*  i  */
+		a407:;
+		}  /*  jj */
+	}  /*  ii */
+
+}
+
+
+/**************************************************/
+/* df05: contact finding by angle criteria        */
+/**************************************************/
+void df05()
+{
+	if (k6 == 1)  fprintf(fl0, "--- 5000--- \n");
+	/*------------------------------------------------*/
+	/* n2 number of contacts m[]                      */
+	n2 = 0;
+	for (i = 1; i <= m6; i++)
+	{
+		/*------------------------------------------------*/
+		/* vector i2i1 i2i3  j2j1 j2j3 rotate from x to y */
+		/* in block i3 i2 i1  j3 j2 j1 rotate from x to y */
+		i2 = labs(k[i]);  
+		j2 = k1[i];  
+		i0 = n0[i2];      
+		jo = n0[j2];     
+		i3 = i2 - 1;   
+		if (i2 == k0[i0][1])  i3 = k0[i0][2];  
+		j3 = j2 - 1;   
+		if (j2 == k0[jo][1])  j3 = k0[jo][2];   
+		i1 = i2 + 1;   
+		if (i2 == k0[i0][2])  i1 = k0[i0][1];   
+		ji = j2 + 1;   
+		if (j2 == k0[jo][2])  ji = k0[jo][1];   
+		/*------------------------------------------------*/
+		/* direction angle of i2i1 i2i3 j2j1 j2j3  ox=>oy */
+		e[1][1] = u[i2][1];      
+		e[2][1] = u[i3][1] - 180;   
+		e[3][1] = u[j2][1];       
+		e[4][1] = u[j3][1] - 180;   
+		/*------------------------------------------------*/
+		/* v - e 180 angle j j2j1 j1j2 rotate from x to y */
+		if (k[i] < 0)  e[4][1] = e[3][1] - 180;   
+		for (j = 1; j <= 4; j++)
+		{
+			if (e[j][1] < 0)  e[j][1] += 360;
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* e1 angle i2 i2i1=>i2i3  e2 angle j2 j2j1=>j2j3 */
+		e1 = e[2][1] - e[1][1];
+		e2 = e[4][1] - e[3][1];
+		if (e1 < 0)  e1 += 360;  
+		if (e2 < 0)  e2 += 360;   
+		/*------------------------------------------------*/
+		/* e3 angle i2i1=>j2j1        e4 angle i2i3=>j2j3 */
+		e3 = e[3][1] - e[1][1];
+		e4 = e[4][1] - e[2][1];
+		if (e3 < 0)  e3 += 360;   
+		if (e4 < 0)  e4 += 360;   
+		/*------------------------------------------------*/
+		/* e5 j2j3=>i2i1  e6 i2i3=>j2j1      e5 e6 may <0 */  
+		e5 = 360 - e3 - e2;    
+		e6 = e3 - e1;       
+		/*------------------------------------------------*/
+		/* 1st angle e1=>e2 > 2nd angle e3=>e4  for check */
+		/* e[0][2] check if whole 2nd angle lay in 1st    */
+		e[1][2] = e[1][1];
+		e[2][2] = e[1][1] + e1;
+		e[3][2] = e[3][1];
+		e[4][2] = e[4][1];
+		e[0][2] = e[3][1] + 0.5 * e2;
+		if (e1 > e2) goto a501;   
+		e[1][2] = e[3][1];     
+		e[2][2] = e[3][1] + e2;
+		e[3][2] = e[1][1];
+		e[4][2] = e[2][1];
+		e[0][2] = e[1][1] + 0.5 * e1;  
+		/*------------------------------------------------*/
+		/* angle overlay check for contacts               */
+		/* h1 angle overlay allowance=3 degree     cons() */
+	a501:;
+		if (e[1][2] + h1 < e[0][2] && e[0][2] < e[2][2] - h1) goto a508;  
+		if (e[1][2] + h1 < e[3][2] && e[3][2] < e[2][2] - h1) goto a508;  
+		if (e[1][2] + h1 < e[4][2] && e[4][2] < e[2][2] - h1) goto a508;  
+		if (e[1][2] + h1 < e[0][2] + 360 && e[0][2] + 360 < e[2][2] - h1) goto a508;  
+		if (e[1][2] + h1 < e[3][2] + 360 && e[3][2] + 360 < e[2][2] - h1) goto a508;  
+		if (e[1][2] + h1 < e[4][2] + 360 && e[4][2] + 360 < e[2][2] - h1) goto a508;  
+		if (k[i] > 0) goto a502;   
+		/*------------------------------------------------*/
+		/* v-e v=i2 edge j1j2   m[][0]=0 v-e m[][0]=1 v-v */
+		/* m[][4] m[][5] 2 side of i2 for lock legth      */
+		n2 += 1;
+		m[n2][0] = 0;  
+		m[n2][1] = i2; 
+		m[n2][2] = ji;
+		m[n2][3] = j2;  
+		m[n2][4] = 0;
+		m[n2][5] = 0;
+		m[n2][6] = 0;
+		if (e5 < h1)  m[n2][4] = i1;  
+		if (e6 < h1)  m[n2][5] = i3;  
+		goto a508;
+		/**************************************************/
+		/* v-v vertex i2 vertex j2        i2<=180 j2<=180 */
+		/* reduce to v-e when adjacent lines are parallel */
+	a502:;
+		if (e5 < h1) goto a503; 
+		if (e6 < h1) goto a504; 
+		goto a505;
+		/*------------------------------------------------*/
+		/* contact edge of e5 as entrance        m[][6]>0 */
+		/* both e5<h1 e6<h1  both angle i2 j2 =180+-2h    */
+	a503:;
+		n2 += 1;
+		m[n2][0] = 0;   
+		m[n2][1] = i2;  
+		m[n2][2] = j2;
+		m[n2][3] = j3;  
+		m[n2][4] = j2;  
+		m[n2][5] = i1;
+		m[n2][6] = i2;  
+		if (e6 < h1) goto a504;
+		goto a508;
+		/*------------------------------------------------*/
+		/* contact edge of e6 as entrance        m[][6]>0 */
+	a504:;
+		n2 += 1;
+		m[n2][0] = 0;   
+		m[n2][1] = j2;  
+		m[n2][2] = i2;
+		m[n2][3] = i3;  
+		m[n2][4] = i2;  
+		m[n2][5] = ji;
+		m[n2][6] = j2;  
+		goto a508;
+		/**************************************************/
+		/* v-v i2<180 j2<180   entrance line j1j2 or i1i2 */
+		/* entrance symmetry if e3=180+-.3h1 take large y */
+	a505:;
+		a1 = 0.5 * e1 + e[1][1];    
+		a2 = 0.5 * e2 + e[3][1];  
+		d1 = fabs(sin(dd * a1));
+		d2 = fabs(sin(dd * a2));
+		n2 += 1;
+		m[n2][0] = 1;   
+		m[n2][1] = i2;  
+		m[n2][2] = ji;
+		m[n2][3] = j2;  
+		b1 = e[3][1]; 
+		if (e3 <= 180 - .3 * h1 || (e3 <= 180 + .3 * h1 && d2 >= d1)) goto a506;
+		m[n2][1] = j2; 
+		m[n2][2] = i1;
+		m[n2][3] = i2;  
+		b1 = e[1][1];   
+		/*------------------------------------------------*/
+		/* v-v i2<180 j2<180   entrance line i2i3 or j2j3 */
+		/* entrance symmetry if e4=180+-.3h1 take large y */
+	a506:;
+		m[n2][4] = j2;  
+		m[n2][5] = i2;
+		m[n2][6] = i3; 
+		b2 = e[2][1];   
+		if (e4 <= 180 - .3 * h1 || (e4 <= 180 + .3 * h1 && d1 >= d2)) goto a507;
+		m[n2][4] = i2; 
+		m[n2][5] = j2;
+		m[n2][6] = j3;  
+		b2 = e[4][1];   
+		/*------------------------------------------------*/
+		/* make 1st entrance symmetry     initialy locked */
+	a507:;
+		d1 = fabs(sin(dd * b1));
+		d2 = fabs(sin(dd * b2));
+		if (d1 >= d2) goto a508;  
+		for (j = 1; j <= 3; j++)
+		{
+			j6 = m[n2][j];
+			m[n2][j] = m[n2][j + 3];
+			m[n2][j + 3] = j6;    
+		}  /*  j  */
+	a508:;
+		if (n2 == 11 * n1 - 1) fprintf(fl0, "@@@ i= %d n2=%d \n", i, n2);
+		/* if (n2==11*n1-1) fprintf(fl0,"@@@m6= i=%d  n2=%d \n",i,n2); */
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df06: contact transfer                         */
+/**************************************************/
+void df06()
+{
+	double sign();
+	if (k6 == 1)  fprintf(fl0, "--- 6000--- \n");
+	/*------------------------------------------------*/
+	/* initiate o0 o1 o2 of next step for transfer    */
+	/* k[] flag of contact point transfer df07 proj() */
+	for (i = 1; i <= n2; i++)
+	{
+		m0[i][1] = 0;   
+		m0[i][2] = 0;   
+		o[i][0] = 0;   
+		o[i][1] = 0;   
+		o[i][2] = 0; 
+		o[i][6] = 0;  
+		k[i] = 0;   
+	}  /*  i  */
+	/**************************************************/
+	/* mm[][0-1] start-end   first block index of m[] */
+	for (i = 1; i <= n1; i++)
+	{
+		mm[i][0] = 0;  
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = 1; i <= n2; i++)
+	{
+		i1 = m[i][1];   
+		ji = m[i][2];     
+		i2 = n0[i1];      
+		j2 = n0[ji];     
+		if (i2 > j2)  i2 = j2;  
+		mm[i2][0] += 1;     
+	}  /*  i  */
+	/*------------------------------------------------*/
+	mm[0][1] = 0;
+	for (i = 1; i <= n1; i++)
+	{
+		mm[i][1] = mm[i][0] + mm[i - 1][1]; 
+		mm[i][0] = mm[i][1] - mm[i][0] + 1; 
+	}  /*  i  */
+	/**************************************************/
+	/* m0[][0] tension flag save to k1[] to transfer  */  
+	if (nn == 1) goto a606;
+	for (i = 1; i <= n6; i++) 
+	{
+		k1[i] = m0[i][0];    
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = 1; i <= n2; i++) 
+	{
+		m0[i][0] = 0;  
+	}  /*  i  */
+	/**************************************************/
+	/* transfer contacts  m1[6]>0 for co-edge   nn>=1 */
+	for (ii = 1; ii <= n6; ii++) 
+	{
+		m0[ii][4] = 0; 
+		if (m0[ii][3] == 0) goto a602;
+		if (m0[ii][3] == 3) m0[ii][4] = 1; 
+		if (m0[ii][3] == 3) m0[ii][3] = 0; 
+		/*------------------------------------------------*/
+		i0 = m1[ii][0]; 
+		/* if (m1[ii][6] > 0) i0=1;                       */
+		for (jj = 0; jj <= i0; jj++)
+		{
+			i1 = m1[ii][1];  
+			ji = m1[ii][2];  
+			i2 = n0[i1];   
+			j2 = n0[ji];     
+			if (i2 > j2)  i2 = j2;  
+			/*------------------------------------------------*/
+			/* i2 same start block         m[6]>0 for co-edge */
+			for (i = mm[i2][0]; i <= mm[i2][1]; i++)  
+			{
+				jo = m[i][0];  
+				if (m[i][6] > 0) jo = 1;
+				for (j = 0; j <= jo; j++)
+				{
+					if (m0[ii][jj + 3] == 0) goto a601;  
+					if (m[i][3 * j + 1] != m1[ii][3 * jj + 1]) goto a601;
+					if (m[i][3 * j + 2] != m1[ii][3 * jj + 2]) goto a601;
+					if (m[i][3 * j + 3] != m1[ii][3 * jj + 3]) goto a601; 
+					/*------------------------------------------------*/
+					/* last step o3 o4 o5 goto next step o0 o1 o2     */
+					/* m0=3 o3 for other spring  o1 other normal dspl */
+					o[i][0] = o[ii][3];  
+					o[i][1] = o[ii][4]; 
+					o[i][2] = o[ii][5]; 
+					o[i][6] = o[ii][7];  
+					if (j == 0 && m[i][0] == 1) o[i][0] = o[ii][3]; 
+					if (j == 0 && m[i][0] == 1) o[i][1] = 0;         
+					if (j == 1 && m[i][0] == 1) o[i][0] = 0;          
+					if (j == 1 && m[i][0] == 1) o[i][1] = o[ii][3];   
+					/*------------------------------------------------*/
+					/* k[] flag of contact point transfer df07 proj() */
+					/* 2 v-e j=0 jj=0 same edge k[]=1 keep lock point */
+					/* m0[0-2] transfer v-v transfer v-e set m0[][]=2 */
+					m0[i][j + 1] = m0[ii][jj + 3]; 
+					m0[i][0] = k1[ii];      
+					if (m[i][0] == 0 && m0[ii][3] == 2 && jj == 0) k[i] = 1;   
+					if (m[i][0] == 0 && m1[ii][0] > 0)  m0[i][j + 1] = 2;    
+				a601:;                                             
+				}  /*  j  */                                    
+			}  /*  i  */
+		}  /*  jj */
+	a602:;
+	}  /*  ii */
+	/**************************************************/
+	/* m0[][1]=0  m0[][2]=1 => m0[][2]=3   v-e to v-v */
+	/* m[][0]=0 i2>0 co-edge match m[][4-6]=>m[][1-3] */
+	/* set m0[i][1]=0    before open-close iterations */
+	for (i = 1; i <= n2; i++)
+	{
+		if (m[i][0] == 0)  goto a603; 
+		i1 = m0[i][1];
+		i2 = m0[i][2];
+		if (i1 != 0)  m0[i][2] = 1; 
+		if (i2 != 0)  m0[i][2] = 3; 
+		m0[i][1] = 0; 
+	a603:;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* to v-e one transfer line                       */
+	for (i = 1; i <= n2; i++)
+	{
+		if (m[i][0] == 0 && m[i][6] == 0) m0[i][2] = m0[i][1];  
+		if (m[i][0] == 0 && m[i][6] == 0) m0[i][1] = 0;  
+	}  /*  i  */
+	/**************************************************/
+	/* v-v to v-e co-edge     set i1 in between i2 i3 */
+	/* switch m[][j] m[][j+3] o[][2] cange o0 o1 same */
+	/* m0[][1-2]=2 keep old penetration & line point  */
+	for (i = 1; i <= n2; i++)
+	{
+		if (m[i][0] == 1 || m[i][6] == 0 || m0[i][1] == 2) goto a604;
+		i1 = m[i][1]; 
+		i2 = m[i][2];
+		i3 = m[i][3];
+		x1 = d[i2][1] - d[i1][1];
+		yi = d[i2][2] - d[i1][2];  
+		x2 = d[i3][1] - d[i1][1];
+		y2 = d[i3][2] - d[i1][2];  
+		d1 = (x1 * x2 + yi * y2); 
+		if (d1 <= 0 && m0[i][2] != 2) goto a604; 
+		/*------------------------------------------------*/
+		m[i][1] = m[i][4];
+		m[i][2] = m[i][5];
+		m[i][3] = m[i][6];
+		m[i][4] = i1;
+		m[i][5] = i2;
+		m[i][6] = i3;
+	a604:;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* to v-e two transfer lines                      */
+	for (i = 1; i <= n2; i++)
+	{
+		if (m[i][0] == 1 || m[i][6] == 0) goto a605;
+		if (m0[i][2] == 0)  m0[i][2] = m0[i][1]; 
+		m0[i][1] = 0; 
+	a605:;
+	}  /*  i  */
+	/**************************************************/
+	/* m1[i][0] joint material number  edge m[i][3-2] */
+	/* m[][2]-m[][3]=>d[i+1][]-d[i][] d[i+1][0] joint */
+a606:;
+	l4 = 0;  
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][2] != 0) l4 += 1;
+		i1 = m[i][2];   
+		m1[i][0] = (long)d[i1][0];
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df07: contact initialization                   */
+/**************************************************/
+void df07()
+{
+	void proj();
+	if (k6 == 1)  fprintf(fl0, "--- 7000--- \n");
+	/*------------------------------------------------*/
+	/* o5 contact length     o1 set sliding direction */
+	/* initiate o3 o4 o5 for comparation of sliding   */
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][2] == 1 && m[i][0] == 0) o[i][1] = .0000000000001 * w0 * sign(o[i][1]);
+		if (m0[i][2] == 1 && m[i][0] == 0) o[i][4] = o[i][1]; 
+		if (m0[i][2] == 1 && m[i][0] == 0) o[i][3] = o[i][0]; 
+		o[i][5] = 0;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* contact length and contact point     nn=1 nn>1 */
+	for (i = 1; i <= n2; i++)
+	{
+		if (nn == 1)
+		{
+			m0[i][0] = 0;       
+			o[i][6] = 0;
+			o[i][7] = 0;
+		}
+		if (m[i][0] == 1) goto a705;  
+		if (m[i][6] == 0) goto a701;  
+		if (m[i][6] > 0) goto a704;  
+		/*------------------------------------------------*/
+		/* v-e => v-e m[][4]>0      set tension m0[][0]=2 */
+	a701:;
+		if (m[i][4] == 0) goto a702;
+		i1 = m[i][1];
+		i2 = m[i][2];
+		i3 = m[i][3];
+		i4 = m[i][4];
+		if (nn == 1) m0[i][0] = 2; 
+		proj();
+		if (nn == 1)
+		{
+			o[i][7] = o[i][5] * hh1 * 2; 
+			o[i][6] = o[i][5] * hh1 * 2; 
+		}
+		/*------------------------------------------------*/
+		/* v-e => v-e m[][5]>0      set tension m0[][0]=2 */
+	a702:;
+		if (m[i][5] == 0) goto a703;
+		i1 = m[i][1];
+		i2 = m[i][2];
+		i3 = m[i][3];
+		i4 = m[i][5];
+		if (nn == 1) m0[i][0] = 2; 
+		proj();
+		if (nn == 1)
+		{
+			o[i][7] = o[i][5] * hh1 * 2; 
+			o[i][6] = o[i][5] * hh1 * 2; 
+		}
+		goto a705;
+		/*------------------------------------------------*/
+		/* v-e => v-e no co-edge      m[i][4]=0 m[i][5]=0 */
+	a703:;
+		i1 = m[i][1];
+		i2 = m[i][2];
+		i3 = m[i][3];
+		i4 = 0;             
+		proj();
+		goto a705;
+		/*------------------------------------------------*/
+		/* v-v => v-e e5<h1 or e6<h1    tension m0[][0]=2 */
+	a704:;
+		i1 = m[i][1];
+		i2 = m[i][2];
+		i3 = m[i][3];
+		i4 = m[i][5];
+		if (nn == 1) m0[i][0] = 2; 
+		proj();
+		if (nn == 1)
+		{
+			o[i][7] = o[i][5] * hh1 * 2; 
+			o[i][6] = o[i][5] * hh1 * 2; 
+		}
+		/*------------------------------------------------*/
+		/* due transfer m[][i+3] may m[][i] m[][5]-m[][6] */   //??
+		i1 = m[i][1];
+		i2 = m[i][2];
+		i3 = m[i][3];
+		i4 = m[i][6];
+		proj();
+	a705:;
+	}  /*  i  */
+	/**************************************************/
+	/* nn=1 set initial open-close state m0[][2]      */
+	/* starting with m0[][2]=1 check initial contact  */
+	if (nn > 1) goto a707;  
+	for (i = 1; i <= n2; i++)
+	{
+		m0[i][2] = 1;   
+		for (j = 0; j <= m[i][0]; j++)
+		{
+			ji = m[i][j * 3 + 1];
+			j2 = m[i][j * 3 + 2];
+			j3 = m[i][j * 3 + 3];
+			x1 = d[ji][1];
+			yi = d[ji][2];  
+			x2 = d[j2][1];
+			y2 = d[j2][2];  
+			x3 = d[j3][1];
+			y3 = d[j3][2]; 
+			/*------------------------------------------------*/
+			/* j1 j2 j3 rotate from x to y => no penetration  */
+			/* nearly close = close       s[] normal distance */
+			a1 = sqrt((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2));  
+			s[j + 1] = ((x2 - x1) * (y3 - yi) - (y2 - yi) * (x3 - x1)) / a1; 
+			if (s[j + 1] > f0 * d0)  m0[i][2] = 0;  
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* v-e  if close  set lock                        */
+		if (m0[i][2] == 0) goto a706;   
+		if (m[i][0] == 0) m0[i][2] = 2;  
+		if (m[i][0] == 0) goto a706;  
+		/*------------------------------------------------*/
+		/* v-v  if close         choose shortest distance */
+		m0[i][2] = 1;  
+		if (s[1] < s[2])  m0[i][2] = 3;  
+	a706:;
+	}  /*  i  */
+a707:;
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* di08: positions of non-zero storage            */
+/**************************************************/
+void di08()
+{
+	if (k6 == 1)  fprintf(fl0, "--- 8000--- \n");
+	/*------------------------------------------------*/
+	/* i:m[] n0[]   w:n1[] k1[]   o:n[] k[]           */
+	/* n[i][1]  begin number of k for i-th row        */
+	/* n[i][2]  number       of k for i-th row        */
+	/* n[i][3]  limit number of k for i-th row        */
+	/* form diagnal term of k[]                       */
+	for (i = 1; i <= n1; i++)
+	{
+		n[i][1] = 20 * (i - 1) + 1;  
+		n[i][2] = 1;        
+		n[i][3] = 20;         
+		i1 = n[i][1];
+		k[i1] = i;         
+	}  /*  i  */
+	/**************************************************/
+	/* registration upper triangle                    */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = mm[i][0]; j <= mm[i][1]; j++)      
+		{
+			i1 = m[j][1];
+			ji = m[j][2]; 
+			i2 = n0[i1]; 
+			j2 = n0[ji];  
+			jo = j2;    
+			if (i2 != i)      jo = i2;  
+			i0 = n[i][1] + n[i][2] - 1;  
+			if (k[i0] == jo)      goto a802;
+			n[i][2] += 1;  
+			if (n[i][2] <= n[i][3]) goto a801;
+			n[i][3] += 20;  
+			if (i == n1)      goto a801;
+			/*------------------------------------------------*/
+			/* move k 20 elements forward                     */
+			for (l = n[n1][1] + n[n1][2] - 1; l >= n[i + 1][1]; l--)
+			{
+				k[l + 20] = k[l]; 
+			}  /*  l  */
+			/*------------------------------------------------*/
+			/* move k 20 element forward change index         */
+			for (l = i + 1; l <= n1; l++)
+			{
+				n[l][1] += 20;  
+			}  /*  l  */
+			/*------------------------------------------------*/
+		a801:;
+			i3 = n[i][1] + n[i][2] - 1;
+			k[i3] = jo;            
+		a802:;
+		}  /*  j  */
+	}  /*  i  */   
+	/**************************************************/
+	/* compact index matrix k[]                       */ 
+	i1 = 0;
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			i1 += 1;
+			k[i1] = k[j];
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	n[1][1] = 1;
+	for (i = 2; i <= n1; i++)
+	{
+		n[i][1] = n[i - 1][1] + n[i - 1][2];
+	}  /*  i  */
+	/**************************************************/
+	/* compute malloc memory                          */
+	b1 = (n1 + 1) * 95.5 + (n1 * 11 + 1) * 16.5 + (n1 * 40 + 1);
+	b1 += (n4 + 1) * 10 + (np + 1) * 10 + (oo + 1) * 6.5 + (n5 + 1) * 3;
+	b1 += (nt + 1) * 3 + (nb + 1) * 13 + (nj + 1) * 3 + n00 * 37;
+	b1 = b1 * 8 / 1000000.0;
+	/**************************************************/
+	/* n3  current number of 6*6 submatrices          */
+	/* n00 maximum number of 6*6 submatrices          */ 
+	n3 = n[n1][1] + n[n1][2] - 1;   
+	if (nn == 1) goto a803;
+	fprintf(fl0, "@ %d @ %d @ %2.2lf MB\n", n3, n00, b1);
+	/* fprintf(fl0,"@ %6d @ %2.2lf MB\n",n00,b1); */
+	if (n00 >= n3) goto a804;
+	/*------------------------------------------------*/
+	/* n3 number of non-zero                          */
+	n7 = n00 + 1;
+	for (i = 0; i < n7; ++i) free((char*)a[i]);
+	free((char*)a);
+	/*------------------------------------------------*/
+	/* define a[][] after n3 is computed              */
+	/* a : general equation coefficent matix          */
+	/* a : non-zero 6*6 submatrices according k       */
+	/* a[n3+1][37]                                    */
+a803:;
+	n7 = n3 + 1;
+	n8 = 37;
+	a = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  a[i] = (double*)malloc(sizeof(double) * n8);
+	n00 = n3;
+	/*------------------------------------------------*/
+a804:;
+	for (i = 1; i <= n1; i++)
+	{
+		k2[i] = i; 
+	}  /*  i  */
+}
+
+/**************************************************/
+/* df08: positions of non-zero storage            */
+/**************************************************/
+void df08()
+{
+	if (k6 == 1)  fprintf(fl0, "--- 8000--- \n");
+	/*------------------------------------------------*/
+	/* i:m[] n0[]   w:n1[] k1[]   o:n[] k[] k2[] k3[] */
+	/* n[i][1]  begin number of k for i-th row        */
+	/* n[i][2]  number       of k for i-th row        */
+	/* n[i][3]  limit number of k for i-th row        */
+	/* registrate diagnal i-i in k[]                  */
+	for (i = 1; i <= n1; i++)
+	{
+		n[i][1] = 20 * (i - 1) + 1;  
+		n[i][2] = 1;        
+		n[i][3] = 20;          
+		i1 = n[i][1];
+		k[i1] = i;          
+	}  /*  i  */
+	/**************************************************/
+	/* registration upper triangle                    */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = mm[i][0]; j <= mm[i][1]; j++)       
+		{
+			i1 = m[j][1]; 
+			ji = m[j][2]; 
+			i2 = n0[i1]; 
+			j2 = n0[ji];  
+			jo = j2;      
+			if (i2 != i)      jo = i2; 
+			i0 = n[i][1] + n[i][2] - 1;  
+			if (k[i0] == jo)      goto a802; 
+			n[i][2] += 1;  
+			if (n[i][2] <= n[i][3]) goto a801;
+			n[i][3] += 20;  
+			if (i == n1)      goto a801;
+			/*------------------------------------------------*/
+			/* move k 20 elements forward                     */ 
+			for (l = n[n1][1] + n[n1][2] - 1; l >= n[i + 1][1]; l--)
+			{
+				k[l + 20] = k[l];  
+			}  /*  l  */
+			/*------------------------------------------------*/
+			/* move k 20 element forward change index         */
+			for (l = i + 1; l <= n1; l++)
+			{
+				n[l][1] += 20; 
+			}  /*  l  */
+			/*------------------------------------------------*/
+			/* registrate i-jo                                */ 
+		a801:;
+			i3 = n[i][1] + n[i][2] - 1;
+			k[i3] = jo;            
+		a802:;
+		}  /*  j  */
+	}  /*  i  */   
+	/**************************************************/
+	/* registration of lower triangle ji-i            */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			ji = k[j];
+			if (ji <= i) goto a804;
+			n[ji][2] += 1;  //ji > i
+			if (n[ji][2] <= n[ji][3]) goto a803;
+			n[ji][3] += 20;
+			if (ji == n1) goto a803;
+			/*------------------------------------------------*/
+			/* move k 20 elements forward                     */
+			for (l = n[n1][1] + n[n1][2] - 1; l >= n[ji + 1][1]; l--)
+			{
+				k[l + 20] = k[l];  
+			}  /*  l  */
+			/*------------------------------------------------*/
+			/* move k 20 element forward change index         */
+			for (l = ji + 1; l <= n1; l++)
+			{
+				n[l][1] += 20; 
+			}  /*  l  */
+			/*------------------------------------------------*/
+		a803:;
+			j2 = n[ji][1] + n[ji][2] - 1;
+			k[j2] = i;        
+		a804:;
+		}  /*  j  */
+	}  /*  i  */  
+	/**************************************************/
+	/* j9 original connection                         */
+	j9 = 0;
+	for (i = 1; i <= n1; i++)
+	{
+		j9 += n[i][2];
+	}  /*  i  */
+	j9 = (j9 - n1) / 2 + n1; 
+	/*------------------------------------------------*/
+	/* k2 old-new blk  k3 new-old blk   k2 reverse k3 */
+	for (i = 1; i <= n1; i++)
+	{
+		k2[i] = i;
+		k3[i] = i;
+	}  /*  i  */
+	/**************************************************/
+	/* find element with minimun connection           */
+	for (i = 1; i <= n1; i++)
+	{
+		i0 = n[i][2];  
+		i1 = i;       
+		for (j = i; j <= n1; j++)
+		{
+			if (i0 <= n[j][2]) goto a805;
+			i0 = n[j][2]; 
+			i1 = j; 
+		a805:;
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* k3 new-old switch *i=i2 *i1=i3 => *i=i3 *i1=i2 */   
+		/* k2 old-new switch *i2=i *i3=i1 => *i2=i1 *i3=i */ 
+		if (i1 == i) goto a807;
+		i2 = k3[i];
+		k3[i] = k3[i1];
+		k3[i1] = i2;
+		k2[i2] = i1;
+		i3 = k3[i];
+		k2[i3] = i;
+		/*------------------------------------------------*/
+		/*  save row i in kk                              */
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			ji = j - n[i][1] + 1;
+			kk[ji] = k[j];
+		}  /*  j  */  
+		/*------------------------------------------------*/
+		/* move row i1 to row i                           */
+		for (j = n[i1][1]; j <= n[i1][1] + n[i1][2] - 1; j++)
+		{
+			ji = n[i][1] + j - n[i1][1];
+			k[ji] = k[j];
+		}  /*  j  */  
+		/*------------------------------------------------*/
+		/* move up between row i and i1  j2<0 is possible */
+		j2 = n[i][3] - n[i1][3];
+		if (j2 <= 0) goto a806;
+		for (j = n[i + 1][1]; j <= n[i1][1] + n[i1][2] - 1; j++) //j2 > 0
+		{
+			k[j - j2] = k[j];   
+		}  /*  j  */
+	a806:;
+		j3 = 0;
+		if (j2 > 0)  j3 = j2;
+		/*------------------------------------------------*/
+		/* put row i in row i1 position             i<=i1 */
+		for (j = n[i1][1] - j3; j <= n[i1][1] - j3 + n[i][2] - 1; j++)
+		{
+			ji = j - n[i1][1] + j3 + 1;
+			k[j] = kk[ji];
+		}  /*  j  */    
+		/*------------------------------------------------*/
+		/* exchange n for row i i1    can't move downward */
+		ji = n[i][2];
+		n[i][2] = n[i1][2];
+		n[i1][2] = ji;    
+		if (j2 <= 0) goto a807;
+		ji = n[i][3];
+		n[i][3] = n[i1][3];
+		n[i1][3] = ji;       
+		/*------------------------------------------------*/
+		/* move up index of row i+1 to i1                 */
+		for (j = i + 1; j <= i1; j++)
+		{
+			n[j][1] = n[j][1] - j2;
+		}  /*  j  */
+		/**************************************************/
+		/* delete i-th colomn elements in lower triangle  */
+		/* upper triangle i-th row = lower i-th colomn    */
+	a807:;
+		if (n[i][2] == 1) goto a815;
+		for (j = n[i][1] + 1; j <= n[i][1] + n[i][2] - 1; j++) 
+		{
+			ji = k[j];  
+			i2 = k2[ji];   
+			for (l = n[i2][1]; l <= n[i2][1] + n[i2][2] - 1; l++)
+			{
+				if (k[l] != k3[i]) goto a808;
+				i3 = l;  
+				goto a809;
+			a808:;
+			}  /*  l  */
+			/*------------------------------------------------*/
+			/* delete element i2i of lower triangle in i2 row */
+		a809:;
+			if (i3 == n[i2][1] + n[i2][2] - 1) goto a810;  
+			for (l = i3 + 1; l <= n[i2][1] + n[i2][2] - 1; l++)
+			{
+				k[l - 1] = k[l];   
+			}  /*  l  */
+		a810:;
+			n[i2][2] = n[i2][2] - 1;
+		}  /*  j  */
+		/**************************************************/
+		/* add 2 connections     i-i1 i-i2 => i1-i2 i2-i1 */
+		if (n[i][2] <= 2) goto a815;
+		for (j = n[i][1] + 1; j <= n[i][1] + n[i][2] - 2; j++)  
+		{
+			for (l = j + 1; l <= n[i][1] + n[i][2] - 1; l++)
+			{
+				i1 = k[j]; 
+				i2 = k[l]; 
+				ji = k2[i1];  
+				for (l1 = n[ji][1]; l1 <= n[ji][1] + n[ji][2] - 1; l1++)
+				{
+					if (k[l1] == i2) goto a812;  
+				}  /*  l1 */
+				/*------------------------------------------------*/
+				/* move k 20 elements forward                     */
+				n[ji][2] += 1;  
+				if (n[ji][2] <= n[ji][3]) goto a811;
+				n[ji][3] += 20;
+				if (ji == n1) goto a811;
+				for (l1 = n[n1][1] + n[n1][2] - 1; l1 >= n[ji + 1][1]; l1--)
+				{
+					k[l1 + 20] = k[l1];
+				}  /*  l1 */
+				/*------------------------------------------------*/
+				/* move k 20 element forward change index         */
+				for (l1 = ji + 1; l1 <= n1; l1++)
+				{
+					n[l1][1] += 20;
+				}  /*  l1 */
+				/*------------------------------------------------*/
+				/* add connection in row i1=>j1   k[j]-k[l] i1-i2 */
+			a811:;
+				i3 = n[ji][1] + n[ji][2] - 1;
+				k[i3] = i2;   
+				/**************************************************/
+				/* add connection in row i2=>j2   k[l]-k[j] i2-i1 */
+			a812:;
+				j2 = k2[i2]; 
+				for (l1 = n[j2][1]; l1 <= n[j2][1] + n[j2][2] - 1; l1++)
+				{
+					if (k[l1] == i1)  goto a814; 
+				}  /*  l1 */
+				/*------------------------------------------------*/
+				n[j2][2] += 1; 
+				if (n[j2][2] <= n[j2][3]) goto a813;
+				n[j2][3] += 20;
+				if (j2 == n1) goto a813;
+				/*------------------------------------------------*/
+				/* move k 20 elements forward                     */
+				for (l1 = n[n1][1] + n[n1][2] - 1; l1 >= n[j2 + 1][1]; l1--)
+				{
+					k[l1 + 20] = k[l1];
+				}  /*  l1 */
+				/*------------------------------------------------*/
+				/* move k 20 element forward change index         */
+				for (l1 = j2 + 1; l1 <= n1; l1++)
+				{
+					n[l1][1] += 20;
+					/*  l1 */
+				}
+				/*------------------------------------------------*/
+			a813:;
+				i4 = n[j2][1] + n[j2][2] - 1;
+				k[i4] = i1;  
+			a814:;
+			}  /*  l  */
+		}  /*  j  */
+		/*------------------------------------------------*/
+	a815:;
+	}  /*  i  */
+	/**************************************************/
+	/* change to new block number                     */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			i1 = k[j];
+			k[j] = k2[i1];
+		}  /*  j  */
+	}  /*  i  */   
+	/*------------------------------------------------*/
+	/* change k to lower tiangle   kk lower row index */
+	for (i = 1; i <= n1; i++)
+	{
+		kk[i] = 0;  
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* element number of rows in lower triangle  kk[] */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			i1 = k[j];  
+			kk[i1] += 1;  
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* n[i][3] change to begin of low triangular row  */ 
+	n[1][3] = 1;
+	for (i = 2; i <= n1; i++)
+	{
+		n[i][3] = n[i - 1][3] + kk[i - 1];
+		kk[i - 1] = 0;
+	}  /*  i  */
+	kk[n1] = 0;
+	/*------------------------------------------------*/
+	/* change kk to point k1   form k1 lower triangle */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			i1 = k[j];
+			kk[i1] += 1;
+			ji = n[i1][3] + kk[i1] - 1;
+			k1[ji] = i;
+		}  /*  j  */
+	}  /*  i  */   
+	/*------------------------------------------------*/
+	/* n[][1] row start n[][2] number  lower tiangule */
+	for (i = 1; i <= n1; i++)
+	{
+		n[i][1] = n[i][3];
+		n[i][2] = kk[i];
+	}  /*  i  */
+	for (i = 1; i <= n[n1][1] + n[n1][2] - 1; i++)
+	{
+		k[i] = k1[i];
+	}  /*  i  */   
+
+
+	/*------------------------------------------------*/
+	/* re-ordering numbers of rows in k[]             */
+	for (i = 1; i <= n1; i++)
+	{
+		if (n[i][2] == 1) goto a817;
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 2; j++)
+		{
+			for (l = j + 1; l <= n[i][1] + n[i][2] - 1; l++)
+			{
+				if (k[j] < k[l]) goto a816;
+				i1 = k[j];
+				k[j] = k[l];
+				k[l] = i1;  
+			a816:;
+			}  /*  l  */
+		}  /*  j  */
+	a817:;
+	}  /*  i  */
+
+		/*sprintf(aa,"Mtrx_k%d.dat",nn);
+		f116=fopen(aa,"w");
+	  for(i=1;i<=n1;i++)
+	  {
+	  for(j=n[i][1];j<=n[i][1]+n[i][2]-1;j++)
+	  {
+		  fprintf(f116,"%d ", k[j]);
+	  }
+	  fprintf(f116,"\n");
+	  }
+	  fclose(f116);*/
+	  /**************************************************/
+	  /* j9 n3       n00 last extended maximum non-zero */
+	n3 = n[n1][1] + n[n1][2] - 1;                            
+	if (nn == 1) goto a818;
+	fprintf(fl0, "@@@@@ o e m  %d %d %d \n", j9, n3, n00); 
+	fprintf(fl0, "@@@@@ %d %d %d \n", j9, n3, n00);
+	if (n00 >= n3) goto a819;
+	/*------------------------------------------------*/
+	/* n3 number of non-zero   extend a[] b[] n00=>n3 */
+	n7 = n00 + 1;
+	for (i = 0; i < n7; ++i) free((char*)a[i]);
+	free((char*)a);
+	for (i = 0; i < n7; ++i) free((char*)b[i]);
+	free((char*)b);
+	/*------------------------------------------------*/
+	/* define a[][] and b[][] after n3 is computed    */
+	/* a: non-zero 6*6 submatrices according k[]      */
+	/* a[n3+1][37]                                    */
+a818:;
+	n7 = n3 + 1;
+	n8 = 37;
+	a = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  a[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	/* b: copy a[] non-zero 6*6 submatrices   df20 24 */
+	/* b[n3+1][37]                                    */
+	n7 = n3 + 1;
+	n8 = 37;
+	b = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i)  b[i] = (double*)malloc(sizeof(double) * n8);
+	n00 = n3;
+	/*------------------------------------------------*/
+a819:;
+}
+
+/**************************************************/
+/* df09: time interpolation                       */
+/**************************************************/
+void df09()
+{
+	if (k6 == 1)  fprintf(fl0, "--- 9000--- \n");
+	/*------------------------------------------------*/
+	/* if a3 out limit    linear extend last interval */
+	a3 = q0[nn - 1][1] + tt; 
+	for (i = 1; i <= nf + nl; i++)
+	{
+		for (j = k4[i][0]; j <= k4[i][1] - 1; j++)
+		{
+			i1 = j; 
+			if ((u0[j][0] <= a3) && (a3 <= u0[j + 1][0])) goto a901;
+		}  /*  j  */
+	a901:;
+		a1 = (a3 - u0[i1][0]) / (u0[i1 + 1][0] - u0[i1][0]);
+		g[i][4] = u0[i1][1] + a1 * (u0[i1 + 1][1] - u0[i1][1]); 
+		g[i][5] = u0[i1][2] + a1 * (u0[i1 + 1][2] - u0[i1][2]); 
+	}  /*  i  */
+	/**************************************************/
+	/* body force interpolation                       */
+	xx = 0.0;
+	yy = 0.0;
+	if (k00 == 0)  goto a902;
+	a3 = q0[nn - 1][1] + tt;      
+	i1 = floor(a3 / zz);       
+	a1 = a3 / zz - (double)i1; 
+	xx = cc[i1][1] + a1 * (cc[i1 + 1][1] - cc[i1][1]); 
+	yy = cc[i1][2] + a1 * (cc[i1 + 1][2] - cc[i1][2]); 
+	/* fprintf(fl0,"xx= %lf \n",xx); */
+	/* fprintf(fl0,"yy= %lf \n",yy); */
+	/*------------------------------------------------*/
+a902:;
+}
+
+/**************************************************/
+/* df10: initiate coefficient and load matrix     */
+/**************************************************/
+void df10()
+{
+	if (k6 == 1)  fprintf(fl0, "---10000--- \n");
+	/*------------------------------------------------*/
+	/* initial a[][]=0 f[][]=0                        */
+	for (i = 1; i <= n3; i++)
+	{
+		for (j = 1; j <= 36; j++)
+		{
+			a[i][j] = 0;   
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = 1; i <= n3; i++)
+	{
+		k1[i] = 0; 
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			f[i][j] = 0;   
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* for reduce time interval     m0[][1]=0 in df07 */
+	for (i = 1; i <= n2; i++)
+	{
+		m0[i][1] = 0;
+	}  /*  i */
+	/*------------------------------------------------*/
+	q0[nn][1] = q0[nn - 1][1] + tt; 
+	q0[nn][2] = tt;    
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df11: submatrix of inertia                     */
+/**************************************************/
+void df11()
+{
+	if (k6 == 1)  fprintf(fl0, "---11000--- \n");
+	/*------------------------------------------------*/
+	/* g3: only difference of statics and dynamics    */
+	/* g4: inertia coefficient of mass matrix         */
+	//if(nn==23)
+	//{
+	//i=0;
+	//}
+	for (i = 1; i <= n1; i++)
+	{
+		/*------------------------------------------------*/
+		/* g4 g3 coefficients of mass and velocity matrix */
+		o0 = e0[i][0] * (h0[i][0] / h0[i][1]);    
+		g4 = 2 * o0 / (tt * tt);   
+		g3 = 2 * o0 / tt * gg;       
+		if (g1 > .00000000001)
+			g3 = 2 * o0 / tt * (gg * q0[nn - 1][2] / g1);
+		/*------------------------------------------------*/
+		/* zero elements of mass matrix in start          */
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				q[j][l] = 0;
+			}  /*  l  */
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* non-zero elements of mass matrix               */
+		x0 = h0[i][2] / h0[i][1];
+		yo = h0[i][3] / h0[i][1];   
+		u1 = h0[i][4] - x0 * h0[i][2]; 
+		u2 = h0[i][5] - yo * h0[i][3]; 
+		u3 = h0[i][6] - x0 * h0[i][3];
+		q[1][1] = h0[i][1];   
+		q[2][2] = h0[i][1];   
+		q[3][3] = u1 + u2;    
+		q[3][4] = -u3;       
+		q[4][3] = q[3][4];    
+		q[3][5] = u3;        
+		q[5][3] = q[3][5];    
+		q[3][6] = (u1 - u2) / 2;  
+		q[6][3] = q[3][6];    
+		q[4][4] = u1;      
+		q[4][6] = u3 / 2;    
+		q[6][4] = q[4][6];    
+		q[5][5] = u2;       
+		q[5][6] = u3 / 2;      
+		q[6][5] = q[5][6];   
+		q[6][6] = (u1 + u2) / 4;  
+		/*------------------------------------------------*/
+		/* add mass matrix to a[][]  diagnal term is last */
+		i1 = k2[i];
+		if (pp == 0)  i2 = n[i1][1] + n[i1][2] - 1;
+		if (pp == 1)  i2 = n[i1][1];           
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				ji = 6 * (j - 1) + l;
+				a[i2][ji] += g4 * q[j][l];  
+			}  /*  l  */
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* add velocity matrix to f[]                     */
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				f[i1][j] += g3 * q[j][l] * v0[i][l]; 
+			}  /*  l  */
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+
+	/*sprintf(aa,"a_mtrx%d_%d.dat",n9,nn);
+		f116=fopen(aa,"w");
+		  for(i=1;i<=n3; i++)
+		  {
+			  //fprintf(f116,"i= %d\n",i);
+			  for(j=1;j<=6; j++)
+			  {
+				  for(i1=1;i1<=6; i1++)
+				  {
+					  l=6*(j-1)+i1;
+					  fprintf(f116,"%11.10lf ",a[i][l]);
+				  }
+				  fprintf(f116,"\n");
+			  }
+		  }
+		  fclose(f116);*/
+}
+
+/**************************************************/
+/* df12: submatrix of fixed points                */
+/**************************************************/
+
+void df12()
+{
+	void dspl();
+	if (k6 == 1)  fprintf(fl0, "---12000--- \n");
+	/*------------------------------------------------*/
+	/* i0: block number                               */
+	for (i = 1; i <= nf; i++)
+	{
+		i0 = (long)g[i][3];  
+		x = g[i][1];
+		y = g[i][2];  
+		dspl();
+		/*------------------------------------------------*/
+		/* 6*6 submatrix of fixed point for a[][]         */
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				if (g[i][4] > 100)
+					e[j][l] = t[2][j] * t[2][l]; 
+				else if (g[i][5] > 100)
+					e[j][l] = t[1][j] * t[1][l];  
+				else
+					e[j][l] = t[1][j] * t[1][l] + t[2][j] * t[2][l]; 
+
+			}  /*  l  */
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* 6*1 submatrix of fixed displacements for f[]   */
+		/* c[][1-3] accumulated -u -v -r initial movement */
+		for (j = 1; j <= 6; j++)
+		{
+			if (g[i][4] > 100)
+				s[j] = t[2][j] * (g[i][5] + c[i][2]);
+			else if (g[i][5] > 100)
+				s[j] = t[1][j] * (g[i][4] + c[i][1]);
+			else
+				s[j] = t[1][j] * (g[i][4] + c[i][1]) + t[2][j] * (g[i][5] + c[i][2]);
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* diagnal term last          fixed spring 100*g0 */
+		i1 = (long)g[i][3];
+		i2 = k2[i1];  
+		if (pp == 0)  i3 = n[i2][1] + n[i2][2] - 1;
+		if (pp == 1)  i3 = n[i2][1];           
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				ji = 6 * (j - 1) + l;
+				a[i3][ji] += 100 * g6 * e[j][l]; 
+			}  /*  l  */
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* initial displacement fixed point spring 100*g0 */
+		for (j = 1; j <= 6; j++)
+		{
+			f[i2][j] += 100 * g6 * s[j]; 
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df13: submatrix of stifness                    */
+/**************************************************/
+void df13()
+{
+	if (k6 == 1)  fprintf(fl0, "---13000--- \n");
+	/*------------------------------------------------*/
+	for (i = 1; i <= 6; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			e[i][j] = 0;
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* a1 block area                e0[3]=e e0[][4]=u */
+	for (i = 1; i <= n1; i++)
+	{
+		a1 = h0[i][1];   
+		a2 = e0[i][3] * a1 / (1 - e0[i][4] * e0[i][4]);
+		e[4][4] = a2;
+		e[4][5] = a2 * e0[i][4];
+		e[5][4] = a2 * e0[i][4];
+		e[5][5] = a2;
+		e[6][6] = a2 * (1 - e0[i][4]) / 2;
+		/*------------------------------------------------*/
+		i2 = k2[i];   
+		if (pp == 0)  i3 = n[i2][1] + n[i2][2] - 1; 
+		if (pp == 1)  i3 = n[i2][1];         
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				ji = 6 * (j - 1) + l;
+				a[i3][ji] += e[j][l];
+			}  /*  l  */
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df14: submatrix of initial stress              */
+/**************************************************/
+void df14()
+{
+	if (k6 == 1)  fprintf(fl0, "---14000--- \n");
+	/*------------------------------------------------*/
+	/* e0[][5]=c11       e0[][6]=c22      e0[][7]=c12 */
+	for (i = 1; i <= n1; i++)
+	{
+		a1 = h0[i][1];   
+		i2 = k2[i]; 
+		f[i2][4] += -a1 * e0[i][5]; 
+		f[i2][5] += -a1 * e0[i][6];
+		f[i2][6] += -a1 * e0[i][7]; 
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+void df15()
+{
+	void dspl();
+
+	if (k6 == 1)  fprintf(fl0, "---15000--- \n");
+	/*------------------------------------------------*/
+	for (i = nf + 1; i <= nf + nl; i++)
+	{
+		i0 = (long)g[i][3];  
+		x = g[i][1];
+		y = g[i][2];  
+		dspl();
+		for (j = 1; j <= 6; j++)
+		{
+			s[j] = t[1][j] * g[i][4] + t[2][j] * g[i][5];
+		}
+
+		for (ii = nf + nl + 1; ii <= nf + nl + 1; ii++)
+		{
+			i1 = ii - nf - nl;
+			i2 = (long)g[ii][3];
+			x8 = -c[ii][1];
+			y8 = -c[ii][2];
+			r1 = -c[ii][3];
+			c11 = e0[i2][5];
+			c22 = e0[i2][6];
+			c12 = e0[i2][7];
+		}
+
+		ll = fabs(g[i][4] / 2e6);
+		for (j = 1; j <= 6; j++)
+		{
+			if (fabs(g[i][4]) > fabs(c22 * ll) && g[i][4] > 0)
+			{
+				s[j] = t[1][j] * fabs(c22) * ll + t[2][j] * g[i][5];
+			}
+			if (fabs(g[i][4]) > fabs(c22 * ll) && g[i][4] < 0)
+			{
+				s[j] = -t[1][j] * fabs(c22) * ll + t[2][j] * g[i][5];
+			}
+			if (fabs(g[i][4]) <= fabs(c22 * ll))
+			{
+				s[j] = t[1][j] * g[i][4] + t[2][j] * g[i][5];
+			}
+
+		}  /*  j  */
+		/*------------------------------------------------*/
+		i1 = (long)g[i][3];
+		i2 = k2[i1];
+		for (j = 1; j <= 6; j++)
+		{
+			f[i2][j] += s[j];
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+
+void df16()
+{
+	if (k6 == 1)  fprintf(fl0, "---16000--- \n");
+	/*------------------------------------------------*/
+	/* e0[][1]=fx e0[][2]=fy       h0[][1] block area */ 
+	for (i = 1; i <= n1; i++)
+	{
+		i2 = k2[i];   
+		f[i2][1] += (e0[i][1] + e0[i][0] * xx) * h0[i][1]; 
+		f[i2][2] += (e0[i][2] + e0[i][0] * yy) * h0[i][1];
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+void df18()
+{
+	void dspl();
+	double sign();
+	if (k6 == 1)  fprintf(fl0, "---18000--- \n");
+	/*------------------------------------------------*/
+	/* c0[] free term of equations for friction force */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			c0[i][j] = 0;  
+		}  /*  j  */
+	}  /*  i  */
+	/**************************************************/
+	/* set off-on of normal and shear spring          */
+	/* j=1 last interation         j=2 this iteration */
+	/* q[j][1-2] normal-shear   q[j][3] 2nd reference */
+	for (i = 1; i <= n2; i++)
+	{
+		for (j = 1; j <= 2; j++)
+		{
+			q[j][1] = 0;
+			q[j][2] = 0;
+			q[j][3] = 0;
+			q[j][4] = 0; 
+			if (m0[i][j] == 0) goto b801;
+			q[j][1] = 1;
+			q[j][2] = 0;
+			if (m0[i][j] == 1) goto b801;  
+			q[j][1] = 1;
+			q[j][2] = 1;
+			if (m0[i][j] == 2) goto b801;
+			q[j][1] = 0;
+			q[j][2] = 0;
+			q[j][3] = 1;
+		b801:;
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* set on-off modify coefficient                  */
+		/* q[1][1-2] normal-shear   q[1][3] 2nd reference */
+		for (j = 1; j <= 4; j++)
+		{
+			q[1][j] = (q[2][j] - q[1][j]);
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* comput 4 6*6         2 6*1 contact submatrices */
+		/* sliding force +- changing shear   g0/h2 h2=2.5 */
+		/* k5=0 set m0[][1]=0 still have friction force   */ //k5=1: m0[i][1]=m0[i][2]
+		/* k5=0 m0[i][1]>0 goto to compute friction force */
+		for (jj = 0; jj <= m[i][0]; jj++)
+		{
+			if (jj == 0) goto b802;
+			q[1][1] = q[1][3];//jj=1
+			q[1][2] = q[1][4];
+		b802:;
+			q[0][1] = q[1][1];
+			q[0][2] = q[1][2];
+			if (o[i][6] < 0.005)
+			{
+				q[1][1] = q[1][1] * hh;
+				q[1][2] = q[1][2] * hh / h2;
+			}
+			else
+			{
+				q[1][1] = q[1][1] * o[i][6];
+				q[1][2] = q[1][2] * o[i][6] / h2;
+			}
+
+
+			if (fabs(q[0][1]) > .5 || fabs(q[0][2]) > .5) goto b803;
+			if (m[i][0] == 0 && m0[i][2] == 1 && k5 == 0) goto b803;
+			if (m[i][0] == 0 && m0[i][2] == 1 && m0[i][1] != 0) goto b803;
+			goto b814;
+			/*------------------------------------------------*/
+			/* submatrix of normal shear springs and friction */
+		b803:;
+			l1 = m[i][3 * jj + 1]; //1
+			l2 = m[i][3 * jj + 2]; //2
+			l3 = m[i][3 * jj + 3]; //3
+			i1 = n0[l1];  //i
+			i2 = n0[l2];  //j
+			ji = k2[i1];
+			j2 = k2[i2];
+			/*------------------------------------------------*/
+			x1 = d[l1][1];
+			yi = d[l1][2];
+			x2 = d[l2][1];
+			y2 = d[l2][2];
+			x3 = d[l3][1];
+			y3 = d[l3][2];
+			/*------------------------------------------------*/
+			/* s1 normal s2 shear coefficients s3 ratio p2-p3 */
+			b1 = sqrt((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2)); 
+			s1 = (x2 - x1) * (y3 - yi) - (y2 - yi) * (x3 - x1);
+			s1 = s1 / b1;
+			if (m[i][0] != 0) goto b804; 
+			s3 = o[i][2];
+			s2 = (x1 - (1 - s3) * x2 - s3 * x3) * (x3 - x2) + (yi - (1 - s3) * y2 - s3 * y3) * (y3 - y2);
+			s2 = s2 / b1; 
+		b804:;
+			i0 = i1; 
+			x = x1;
+			y = yi;
+			dspl();
+			for (j = 1; j <= 6; j++)
+			{
+				s[j] = (y2 - y3) * t[1][j] + (x3 - x2) * t[2][j];
+				s[j] /= b1; 
+				if (m[i][0] != 0) goto b805; 
+				s[j + 12] = (x3 - x2) * t[1][j] + (y3 - y2) * t[2][j]; 
+				s[j + 12] /= b1;
+			b805:;
+			}  /*  j  */
+			/*------------------------------------------------*/
+			/* p2 terms      s07-s12 j normal s19-s24 j shear */
+			/* p2 terms      s25-s32 j friction               */
+			i0 = i2; //l2所在的块体号
+			x = x2;
+			y = y2;
+			dspl();
+			for (j = 1; j <= 6; j++)
+			{
+				s[j + 6] = (y3 - yi) * t[1][j] + (x1 - x3) * t[2][j]; 
+				if (m[i][0] != 0) goto b806; 
+				s[j + 18] = (-x1 + 2 * (1 - s3) * x2 - (1 - 2 * s3) * x3) * t[1][j];
+				s[j + 18] += (-yi + 2 * (1 - s3) * y2 - (1 - 2 * s3) * y3) * t[2][j]; 
+				s[j + 24] = (1 - s3) * ((x3 - x2) * t[1][j] + (y3 - y2) * t[2][j]); 
+			b806:;
+			}  /*  j  */
+			/*------------------------------------------------*/
+			/* p3 terms      s07-s12 j normal s19-s24 j shear */
+			/* p3 terms      s25-s32 j friction               */
+			i0 = i2; 
+			x = x3;
+			y = y3;
+			dspl();
+			for (j = 1; j <= 6; j++)
+			{
+				s[j + 6] += (yi - y2) * t[1][j] + (x2 - x1) * t[2][j];
+				s[j + 6] /= b1; 
+				if (m[i][0] != 0) goto b807; 
+				s[j + 18] += (x1 - (1 - 2 * s3) * x2 - 2 * s3 * x3) * t[1][j];
+				s[j + 18] += (yi - (1 - 2 * s3) * y2 - 2 * s3 * y3) * t[2][j];
+				s[j + 18] /= b1;        
+				s[j + 24] += s3 * ((x3 - x2) * t[1][j] + (y3 - y2) * t[2][j]);
+				s[j + 24] /= b1; 
+			b807:;
+			}  /*  j  */
+			/**************************************************/
+			/* submatrix ii  s01-06 i normal s13-18 i shear   */
+			/* 1st if for friction force                      */
+			if (fabs(q[0][1]) < .5 && fabs(q[0][2]) < .5) goto b813;
+			if (pp == 0)  i3 = n[ji][1] + n[ji][2] - 1; 
+			if (pp == 1)  i3 = n[ji][1]; 
+			for (j = 1; j <= 6; j++)
+			{
+				for (l = 1; l <= 6; l++)
+				{
+					j3 = 6 * (j - 1) + l;
+					a[i3][j3] += q[1][1] * s[j] * s[l]; 
+					if (fabs(q[0][2]) > .5)
+						a[i3][j3] += q[1][2] * s[j + 12] * s[l + 12]; 
+				}  /*  l  */
+			}  /*  j  */
+			/*------------------------------------------------*/
+			/* submatrix jj  s07-12 j normal s19-24 j shear   */
+			if (pp == 0)  i3 = n[j2][1] + n[j2][2] - 1; 
+			if (pp == 1)  i3 = n[j2][1]; 
+			for (j = 1; j <= 6; j++)
+			{
+				for (l = 1; l <= 6; l++)
+				{
+					j3 = 6 * (j - 1) + l;
+					a[i3][j3] += q[1][1] * s[j + 6] * s[l + 6];
+					if (fabs(q[0][2]) > .5) 
+						a[i3][j3] += q[1][2] * s[j + 18] * s[l + 18]; 
+				}  /*  l  */
+			}  /*  j  */
+			/*------------------------------------------------*/
+			/* locate j1j2 in a[][] only lower triangle saved */
+			if (pp == 0 && ji < j2) goto b809;
+			if (pp == 1 && ji > j2) goto b809; 
+			for (j = n[ji][1]; j <= n[ji][1] + n[ji][2] - 1; j++)
+			{
+				i3 = j;
+				if (k[j] == j2) goto b808;   
+			}  /*  j  */
+			/*------------------------------------------------*/
+			/* submatrix ij  s01-06 i normal s07-12 j normal   */
+		b808:;
+			for (j = 1; j <= 6; j++)
+			{
+				for (l = 1; l <= 6; l++)
+				{
+					j3 = 6 * (j - 1) + l;
+					a[i3][j3] += q[1][1] * s[j] * s[l + 6];
+					if (fabs(q[0][2]) > .5) 
+						a[i3][j3] += q[1][2] * s[j + 12] * s[l + 18]; 
+				}  /*  l  */
+			}  /*  j  */
+			k1[i3] = 1; 
+			goto b811;
+			/*------------------------------------------------*/
+			/* locate j2j1 in a[][] only lower triangle saved */
+		b809:;
+			for (j = n[j2][1]; j <= n[j2][1] + n[j2][2] - 1; j++)
+			{
+				i3 = j;
+				if (k[j] == ji) goto b810;   
+			}  /*  j  */
+			/*------------------------------------------------*/
+			/* submatrix ji  s07-12 j normal s19-24 j shear   */
+		b810:;
+			for (j = 1; j <= 6; j++)
+			{
+				for (l = 1; l <= 6; l++)
+				{
+					j3 = 6 * (j - 1) + l;
+					a[i3][j3] += q[1][1] * s[j + 6] * s[l]; 
+					if (fabs(q[0][2]) > .5)
+						a[i3][j3] += q[1][2] * s[j + 18] * s[l + 12]; 
+				}  /*  l  */
+			}  /*  j  */
+			k1[i3] = 1;
+			/*------------------------------------------------*/
+			/* load term of normal & shear  s1 s2 coefficient */
+		b811:;
+			for (j = 1; j <= 6; j++)
+			{
+				f[ji][j] += -q[1][1] * s1 * s[j];   
+				f[j2][j] += -q[1][1] * s1 * s[j + 6]; 
+				if (fabs(q[0][2]) < .5) goto b812;
+				f[ji][j] += -q[1][2] * s2 * s[j + 12];   
+				f[j2][j] += -q[1][2] * s2 * s[j + 18];   
+			b812:;
+			}  /*  j  */
+			/*------------------------------------------------*/
+			/* sliding friction force      s4*g0 normal force */
+		b813:;
+			if (m[i][0] != 0 || m0[i][2] != 1) goto b814;
+			if (m0[i][1] == 0 && k5 == 1) goto b814;
+			s4 = o[i][3];
+			if (s4 > 0)  s4 = 0;
+			j4 = m1[i][0];  
+			t1 = b0[j4][0];   
+			t2 = b0[j4][1] * o[i][5];  
+			e1 = 0;
+			if (m0[i][0] == 2)  e1 = t2; 
+			s4 = (fabs(s4) * g7 * tan(dd * t1) + e1) * sign(o[i][4]);
+			for (j = 1; j <= 6; j++)
+			{
+				c0[ji][j] += -s4 * s[j + 12];  
+				c0[j2][j] += s4 * s[j + 24];  
+			}  /*  j  */
+		b814:;
+
+		}  /*  jj */
+	}  /*  i  */
+	/*------------------------------------------------*/
+
+
+		/*sprintf(aa,"a_mtrx%d_%d.dat",n9,nn);
+		f116=fopen(aa,"w");
+		  for(i=1;i<=n3; i++)
+		  {
+			  //fprintf(f116,"i= %d\n",i);
+			  for(j=1;j<=6; j++)
+			  {
+				  for(i1=1;i1<=6; i1++)
+				  {
+					  l=6*(j-1)+i1;
+					  fprintf(f116,"%11.10lf ",a[i][l]);
+				  }
+				  fprintf(f116,"\n");
+			  }
+		  }
+		  fclose(f116);*/
+
+
+		  /*sprintf(aa,"f_mtrx%d_%d.dat",n9,nn);
+			f116=fopen(aa,"w");
+			  for(i=1;i<=n1; i++)
+			  {
+				  //fprintf(f116,"i= %d\n",i);
+				  for(j=1;j<=6; j++)
+				  {
+						  fprintf(f116,"%11.10lf ",f[i][j]);
+				  }
+				  fprintf(f116,"\n");
+			  }
+			  fclose(f116);	*/
+
+			  /*sprintf(aa,"c0_mtrx%d_%d.dat",n9,nn);
+			f116=fopen(aa,"w");
+			  for(i=1;i<=n1; i++)
+			  {
+				  for(j=1;j<=6; j++)
+				  {
+						  fprintf(f116,"%11.10lf ",c0[i][j]);
+				  }
+				  fprintf(f116,"\n");
+			  }
+			  fclose(f116);*/
+}
+
+/**************************************************/
+/* di20: SOR interation equation solver           */
+/**************************************************/
+void di20()
+{
+	void invr();
+	if (k6 == 1)  fprintf(fl0, "---20000--- \n");
+	/*------------------------------------------------*/
+	/* start new iteration                            */
+	/* e1:solution error          e2:sum of solutions */
+	i5 = 0;
+c001:;
+	e1 = 0;
+	e2 = 0;
+	/*------------------------------------------------*/
+	/* initial value of free term                     */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			r[i][j] = f[i][j] + c0[i][j]; 
+		}  /*  j  */
+	}  /*  i  */
+	/**************************************************/
+	/*  inverse of diagnal 6*6 submatrices            */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = n[i][1];
+		ji = 0;
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				ji++;
+				q[j][l] = a[i1][ji]; 
+			}  /*  l  */
+		}  /*  j  */
+		invr();
+		/*------------------------------------------------*/
+		ji = 0;
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				ji++;
+				v[i][ji] = e[j][l];
+			}  /*  l  */
+		}  /*  j  */
+	}  /*  i  */    
+	/**************************************************/
+	/* operation of upper triangle                    */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = n[i][1] + 1; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			if (k1[j] == 0) goto c002;
+			i1 = k[j];   
+			i0 = 0;
+			for (l = 1; l <= 6; l++)
+			{
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					i0++;
+					r[i][l] += -a[j][i0] * z[i1][l1];//b-[L]Xk+1-[U]Xk
+				}  /*  l1 */
+			}  /*  l  */
+		c002:;
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* operation of diagnal terms                     */
+		i0 = 0;
+		for (j = 1; j <= 6; j++)
+		{
+			s[j] = 0;
+			for (l = 1; l <= 6; l++)
+			{
+				i0++;
+				s[j] += v[i][i0] * r[i][l];//[D]^-1(b-[L]Xk+1-[U]Xk)
+			}  /*  l  */
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* qq: sor factor 1.0 -- 2.0     compute solution */
+		for (j = 1; j <= 6; j++)
+		{
+			a1 = qq * (s[j] - z[i][j]) + z[i][j];//W*{[D]^-1(b-[L]Xk+1-[U]Xk)-Xk}+Xk
+			e1 += fabs(a1 - z[i][j]);
+			e2 += fabs(a1);
+			z[i][j] = a1;
+		}  /*  j  */
+		/**************************************************/
+		/* operation of lower triangle                    */
+		for (j = n[i][1] + 1; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			if (k1[j] == 0) goto c003;
+			i1 = k[j];   
+			for (l = 1; l <= 6; l++)
+			{
+				i0 = l;
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					r[i1][l] += -a[j][i0] * z[i][l1];//-[L]Xk+1
+					i0 += 6;
+				}  /*  l1 */
+			}  /*  l  */
+		c003:;
+		}  /*  j  */
+	}  /*  i  */
+	/**************************************************/
+	/* error and branch of iteration                  */
+	i5 = i5 + 1;
+	e1 = e1 / (e2 + .00000000001);
+	/* if (i5%20 == 0) fprintf(fl0,"it %6d %lf \n",i5,e1); */
+	if (e1 < .00000001) goto c004;
+	if (i5 > 200) goto c004;
+	/*------------------------------------------------*/
+	/* goto next iteration                            */
+	goto c001;
+c004:;
+	fprintf(fl0, "end%6d %lf \n", i5, e1);
+	/* fprintf(fl0,"end %6d \n",i5); */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df20: triangle discomposition equation solver  */
+/**************************************************/
+void df20()
+{
+	void invr();
+	void mult();
+	if (k6 == 1)  fprintf(fl0, "---20000--- \n");
+	/*------------------------------------------------*/
+	/* save equation coefficient matrix brfore change */
+	for (i = 1; i <= n3; i++)
+	{
+		for (j = 1; j <= 36; j++)
+		{
+			b[i][j] = a[i][j];
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* save f[]          add frinction loading to f[] */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			r[i][j] = f[i][j];
+			f[i][j] += c0[i][j];
+		}  /*  j  */
+	}  /*  i  */
+	/**************************************************/
+	/* L U triangle   A=L D^(-1) L^T  i1:i-i j1:j0-j0 */
+	for (i = 1; i <= n1; i++)
+	{
+		if (n[i][2] == 1)   goto c006;
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 1; j++)
+		{
+			i1 = n[i][1] + n[i][2] - 1;
+			jo = k[j];
+			if (n[jo][2] == 1)  goto c005;
+			ji = n[jo][1] + n[jo][2] - 1;
+			i2 = n[i][1];
+			j2 = n[jo][1];
+			/*------------------------------------------------*/
+			/* i:i row  j:j0 row  i2:k j2:k      i-j non-zero */
+		c001:;
+			if (k[i2] >= k[j2]) goto c003;
+		c002:;
+			i2 += 1;
+			if (i2 > i1 - 1) goto c005;
+		c003:;
+			if (k[i2] <= k[j2]) goto c004;
+			j2 += 1;
+			if (j2 > ji - 1) goto c005;
+		c004:;
+			if (k[i2] != k[j2]) goto c001;
+			j3 = k[i2];
+			/*------------------------------------------------*/
+			/* L_ik L_kk^-1        Q*E => Q      i2:i-k  k=j3 */
+			for (l = 1; l <= 6; l++)
+			{
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					i3 = 6 * (l - 1) + l1;
+					q[l][l1] = a[i2][i3];
+					e[l][l1] = v[j3][i3];
+				}  /*  l1 */
+			}  /*  l  */
+			mult();
+			/*------------------------------------------------*/
+			/* Q=L_ik L_kk^-1 E=L_jk^T     E--E^T    Q*E => Q */
+			for (l = 1; l <= 6; l++)
+			{
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					i3 = 6 * (l - 1) + l1;
+					e[l1][l] = a[j2][i3];
+				}  /*  l1 */
+			}  /*  l  */
+			mult();
+			/*------------------------------------------------*/
+			/* L_ij = A_ij - S_k=1^j-1 L_ik L_kk^-1 L_jk^T    */
+			for (l = 1; l <= 6; l++)
+			{
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					i3 = 6 * (l - 1) + l1;
+					a[j][i3] += -q[l][l1];
+				}  /*  l1 */
+			}  /*  l  */
+			goto c002;
+		c005:;
+		}  /*  j  */
+		/*================================================*/
+		/* inverse of diagnal 6*6 submatrices  Q^-1 => E  */
+	c006:;
+		i1 = n[i][1] + n[i][2] - 1;
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				ji = 6 * (j - 1) + l;
+				q[j][l] = a[i1][ji];
+			}  /*  l  */
+		}  /*  j  */
+		invr();
+		/*------------------------------------------------*/
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= 6; l++)
+			{
+				ji = 6 * (j - 1) + l;
+				v[i][ji] = e[j][l];
+			}  /*  l  */
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	  /*f116=fopen("Test.dat","w");
+
+		  for(i=1;i<=n3; i++)
+		  {
+			  fprintf(f116,"i= %d\n",i);
+			  for(j=1;j<=6; j++)
+			  {
+				  for(i1=1;i1<=6; i1++)
+				  {
+					  l=6*(j-1)+i1;
+					  fprintf(f116,"%lf  ",a[i][l]);
+				  }
+				  fprintf(f116,"\n");
+			  }
+		  }
+	  fclose(f116);*/
+
+	  /*f116=fopen("Test.dat","w");
+
+		  for(i=1;i<=n1; i++)
+		  {
+			  fprintf(f116,"i= %d\n",i);
+			  for(j=1;j<=6; j++)
+			  {
+				  for(i1=1;i1<=6; i1++)
+				  {
+					  l=6*(j-1)+i1;
+					  fprintf(f116,"%lf  ",v[i][l]);
+				  }
+				  fprintf(f116,"\n");
+			  }
+		  }
+		  fclose(f116);*/
+
+
+		  /*	sprintf(aa,"v_mtrx%d_%d.dat",n9,nn);
+			f116=fopen(aa,"w");
+			  for(i=1;i<=n1; i++)
+			  {
+				  //fprintf(f116,"i= %d\n",i);
+				  for(j=1;j<=6; j++)
+				  {
+					  for(i1=1;i1<=6; i1++)
+					  {
+						  l=6*(j-1)+i1;
+						  fprintf(f116,"%11.10lf ",v[i][l]);
+					  }
+					  fprintf(f116,"\n");
+				  }
+			  }
+			  fclose(f116);*/
+
+			  /*sprintf(aa,"a_mtrx%d_%d.dat",n9,nn);
+			f116=fopen(aa,"w");
+			  for(i=1;i<=n3; i++)
+			  {
+				  //fprintf(f116,"i= %d\n",i);
+				  for(j=1;j<=6; j++)
+				  {
+					  for(i1=1;i1<=6; i1++)
+					  {
+						  l=6*(j-1)+i1;
+						  fprintf(f116,"%11.10lf ",a[i][l]);
+					  }
+					  fprintf(f116,"\n");
+				  }
+			  }
+			  fclose(f116);*/
+}
+
+
+
+/**************************************************/
+/* df21: backward and forward substitution        */
+/**************************************************/
+void df21()
+{
+	if (k6 == 1)  fprintf(fl0, "---21000--- \n");
+	/*------------------------------------------------*/
+	/* F_i - S_k=1^i-1 L_ik Y_k  i:i k:i1=k[j]   back */
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = n[i][1]; j <= n[i][1] + n[i][2] - 2; j++)
+		{
+			i1 = k[j];
+			for (l = 1; l <= 6; l++)
+			{
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					f[i][l] += -a[j][6 * (l - 1) + l1] * f[i1][l1];
+				}  /*  l1 */
+			}  /*  l  */
+		}  /*  j  */
+
+		/*------------------------------------------------*/
+		/* Y_i = L_ii^-1 (F_i - S_k=1^i-1 L_ik Y_k)  back */
+		for (j = 1; j <= 6; j++)
+		{
+			s[j] = 0;
+			for (l = 1; l <= 6; l++)
+			{
+				s[j] += v[i][6 * (j - 1) + l] * f[i][l];
+			}  /*  l  */
+		}  /*  j  */
+		/*------------------------------------------------*/
+		for (j = 1; j <= 6; j++)
+		{
+			f[i][j] = s[j];
+		}  /*  j  */
+	}  /*  i  */
+	/**************************************************/
+	/* find L_ki^T  k>i  i:i k:j=>j1             fore */
+	for (i = n1 - 1; i >= 1; i--)
+	{
+		for (j = i + 1; j <= n1; j++)
+		{
+			for (l = n[j][1]; l <= n[j][1] + n[j][2] - 1; l++)
+			{
+				ji = l;
+				if (k[l] == i) goto c101;
+			}  /*  l  */
+			goto c102;
+		c101:;
+			/*------------------------------------------------*/
+			/* Q=L_ii^(-1)  E=L_ki^T  E => E^T          fore  */
+			for (l = 1; l <= 6; l++)
+			{
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					q[l][l1] = v[i][6 * (l - 1) + l1];
+					e[l1][l] = a[ji][6 * (l - 1) + l1];
+				}  /*  l1 */
+			}  /*  l  */
+			/*------------------------------------------------*/
+			/* E=L_ki^T  F[j]=X_k  E*F => T=L_ki^T X_k   fore */
+			for (l = 1; l <= 6; l++)
+			{
+				t[l][1] = 0;
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					t[l][1] += e[l][l1] * f[j][l1];
+				}  /*  l1 */
+			}  /*  l  */
+			/*------------------------------------------------*/
+			/* X_i = Y_i - S_(k=i+1)^n L_ii^(-1) L_ki^T X_k   */
+			for (l = 1; l <= 6; l++)
+			{
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					f[i][l] += -q[l][l1] * t[l1][1];
+				}  /*  l1 */
+			}  /*  l  */
+		c102:;
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			z[i][j] = f[i][j];
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+
+
+
+}
+
+/**************************************************/
+/* df22: contact judge after iteration            */
+/**************************************************/
+void df22()
+{
+	void   dspl();
+	double sign();
+	if (k6 == 1)  fprintf(fl0, "---22000--- \n");
+	/*------------------------------------------------*/
+	/* open-close recoerd transfer      putchar(BELL) */
+	for (i = 1; i <= n2; i++)
+	{
+		m0[i][1] = m0[i][2];  
+	}  /*  i  */
+	g7 = hh;
+	/*------------------------------------------------*/
+	/* l0 vertex   i0 block number   p[] displacement */
+	for (i = 1; i <= n2; i++)
+	{
+		i1 = m[i][0];    
+		for (j = 0; j <= i1; j++)
+		{
+			for (l = 1; l <= 3; l++)
+			{
+				l0 = m[i][j * 3 + l];
+				i0 = n0[l0];  
+				x = d[l0][1];
+				y = d[l0][2];  
+				dspl();
+				q[l][1] = x;
+				q[l][2] = y; 
+				p[l][1] = 0;
+				p[l][2] = 0;
+				i2 = k2[i0];   
+				for (l1 = 1; l1 <= 6; l1++)
+				{
+					p[l][1] += t[1][l1] * z[i2][l1];
+					p[l][2] += t[2][l1] * z[i2][l1];
+				}  /*  l1 */
+			}  /*  l  */
+			/*------------------------------------------------*/
+			x1 = q[1][1];
+			yi = q[1][2];
+			x2 = q[2][1];
+			y2 = q[2][2];
+			x3 = q[3][1];
+			y3 = q[3][2];
+			/*------------------------------------------------*/
+			a1 = sqrt((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2));  
+			d1 = ((x2 - x1) * (y3 - yi) - (y2 - yi) * (x3 - x1)) / a1; 
+			b1 = p[1][1] * (y2 - y3) + p[1][2] * (x3 - x2); 
+			b1 += p[2][1] * (y3 - yi) + p[2][2] * (x1 - x3); 
+			b1 += p[3][1] * (yi - y2) + p[3][2] * (x2 - x1); 
+			s[j + 3] = b1 / a1 + d1; 
+			s[j + 1] = b1 / a1 + d1;  
+		}  /*  j  */
+		/*================================================*/
+		/* find joint t1:frinction t2:cohesion t3:tension */
+		ji = m1[i][0];   
+		t1 = b0[ji][0];   
+		t2 = b0[ji][1] * o[i][5];  
+		t3 = b0[ji][2] * o[i][5];  
+		if (o[i][6] > 0)
+		{
+			hh = o[i][6]; 
+		}
+		else
+		{
+			hh = g7;
+		}
+		/*------------------------------------------------*/
+		/* open-close set  a-a shortest g0:g0 forming oi0 */   
+		o[i][3] = s[1]; 
+		m0[i][2] = 1;  
+		if (i1 == 0 || s[3] >= s[4]) goto c201;
+		o[i][3] = s[2]; 
+		m0[i][2] = 3; 
+		/*------------------------------------------------*/
+		/* cases: pre-close pre-open pre-close alt-side   */
+	c201:;
+		if (m0[i][1] == 0) goto c204; 
+		if (i1 == 0) goto c203; 
+		if (m0[i][1] == m0[i][2]) goto c203; 
+		if (m0[i][1] != m0[i][2]) goto c202; 
+		/*------------------------------------------------*/
+		/* previously close: alternate near side for v-v  */
+		/* f0=.0000001  cons()                            */   
+	c202:;
+		c1 = s[1]; 
+		if (m0[i][1] == 3)   c1 = s[2];  
+		if (c1 > f0 * w0 / hh)   m0[i][2] = 0; 
+		goto c205;
+		/*------------------------------------------------*/
+		/* previously close: same      near side for v-v  */
+	c203:;
+		e1 = 0;
+		if (m0[i][0] == 2 && i1 == 0)  e1 = t3 / hh; 
+		if (o[i][3] > e1 + f0 * w0 / hh)  m0[i][2] = 0; 
+		goto c205;
+		/*------------------------------------------------*/
+		/* previously open                                */
+	c204:;
+		if (o[i][3] > -f0 * w0)   m0[i][2] = 0;  
+		/*================================================*/
+		/* contact position  v-e close  keep old position */
+	c205:;
+		if (i1 == 1 || m0[i][2] == 0) goto c212;
+		if (m0[i][1] > 0) goto c207;
+		/*------------------------------------------------*/ 
+		/* newly close v-e            t0:0-1 contact time */
+		/* d1 b1 previous define                          */
+		if (d1 < 0 || fabs(b1) < .000000001 * w0 * w0)      t0 = 0; 
+		if (d1 < 0 || fabs(b1) < .000000001 * w0 * w0) goto c206; 
+		t0 = -d1 * 1.0 / b1;  
+		if (t0 < 0)  t0 = 0; 
+		if (t0 > 1)  t0 = 1; 
+		/*------------------------------------------------*/
+		/* from open to close compute new lock position   */
+	c206:;
+		x4 = x1 + t0 * p[1][1];
+		y4 = yi + t0 * p[1][2];
+		x5 = x2 + t0 * p[2][1];
+		y5 = y2 + t0 * p[2][2];
+		x6 = x3 + t0 * p[3][1];
+		y6 = y3 + t0 * p[3][2];
+		b2 = (x6 - x5) * (x6 - x5) + (y6 - y5) * (y6 - y5);  
+		if (m0[i][0] == 0) 
+			o[i][2] = ((x4 - x5) * (x6 - x5) + (y4 - y5) * (y6 - y5)) / b2;   
+			/*------------------------------------------------*/
+			/* case e-v sliding distance         a1: previous */
+	c207:;
+		x0 = (1 - o[i][2]) * x2 + o[i][2] * x3;  
+		yo = (1 - o[i][2]) * y2 + o[i][2] * y3; 
+		x4 = (1 - o[i][2]) * p[2][1] + o[i][2] * p[3][1]; 
+		y4 = (1 - o[i][2]) * p[2][2] + o[i][2] * p[3][2]; 
+		s1 = (x1 - x0) * (x3 - x2) + (yi - yo) * (y3 - y2);
+		s1 /= a1; 
+		s2 = (p[1][1] - x4) * (x3 - x2) + (p[1][2] - y4) * (y3 - y2);
+		s2 += (x1 - x0) * (p[3][1] - p[2][1]) + (yi - yo) * (p[3][2] - p[2][2]);
+		s2 /= a1;
+		q1 = sign(o[i][4]);
+		q2 = s1 + s2;
+		o[i][4] = s1 + s2; 
+		/*================================================*/
+		/* cases: open lock inherit-slide reverse-slide   */
+		/* m0[][2]=1 is previously set for all cases      */
+		if (m0[i][1] == 0) goto c208; 
+		if (m0[i][1] == 2) goto c209;  
+		if (q1 * q2 >= -.0000001 * w0) goto c210;  
+		if (q1 * q2 <= -.0000001 * w0) goto c211;  
+		/*------------------------------------------------*/
+		/* previous open (no shear spring was set)        */
+	c208:;
+		a2 = tan(dd * t1); 
+		if (fabs(o[i][4]) < fabs(a2 * o[i][3]))  m0[i][2] = 2;     
+		goto c212;
+		/*------------------------------------------------*/
+		/* previous lock (h2 shear spring was set) h2=2.5 */  
+	c209:;
+		e1 = 0;
+		if (m0[i][0] == 2)  e1 = t2 / hh; 
+		a2 = tan(dd * t1);  
+		if (o[i][3] > 0)  a2 = 0; 
+		if (fabs(o[i][3]) * a2 + e1 > fabs(o[i][4]) / h2)  m0[i][2] = 2;
+		goto c212;
+		/*------------------------------------------------*/
+		/* sliding direction is same    as previous step  */
+	c210:;
+		goto c212;
+		/*------------------------------------------------*/
+		/* sliding direction is reverse of previous step  */
+	c211:;
+		if (t1 > .9)  m0[i][2] = 2;
+		/*------------------------------------------------*/
+		/* normal force near zero                         */
+	c212:;
+		hh = g7; 
+
+		/* fprintf(fl0,"i= %d  m0i2= %d m0i0= %d oi0=%lf oi1=%lf \n", */
+		/*              i,m0[i][2],m0[i][0],o[i][0],o[i][3]);         */
+		/* fprintf(fl0,"m0=%d mm=%d m1=%d m3=%d m4=%d m5=%d m6=%d\n", */
+		/* m[i][0],m[i][1],m[i][2],m[i][3],m[i][4],m[i][5],m[i][6]);  */
+	}  /*  i  */
+	/**************************************************/
+	/* open-to-close i7              close-to-open i8 */
+	i7 = 0;  
+	i8 = 0;  
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][1] == 0 && m0[i][2] > 0)  i7 += 1; 
+		if (m0[i][2] == 0 && m0[i][1] > 0)  i8 += 1; 
+	}  /*  i  */
+	/*------------------------------------------------*/
+	if (i7 + i8 > 0 || n9 == 1) goto c213; 
+	time(&finishT);
+	fprintf(fl0, "!!!!!step!!!!!%d                   Total elapsed time:  %d\n", nn, (long int)(finishT - startT));
+	/* fprintf(fl0,"!!!!!step!!!!!%4d \n",nn); */
+	m8 = m9;  
+	m9 = -1;
+	/*------------------------------------------------*/
+	i9 = 0; 
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][2] > 0)  i9 += 1;
+	}  /*  i  */
+	fprintf(fl0, "contact= %6d transfer= %6d close= %6d \n", n2, l4, i9);
+c213:;
+	/*------------------------------------------------*/
+	/*                                              d */
+	if (0 == 0) goto db02;
+	fprintf(fl0, "m[i][0] m[][1] m[][2] m[][3] ");  
+	fprintf(fl0, "m[][4] m[][5] m[][6] ");
+	fprintf(fl0, "m0[][1] m0[][2]\n");
+	fprintf(fl0, "oi0 oi3 oi1 oi4 oi2\n");
+	for (i = 1; i <= n2; i++)
+	{
+		fprintf(fl0, "%2d ", m[i][0]);
+		fprintf(fl0, "%6d %6d %6d", m[i][1], m[i][2], m[i][3]);
+		fprintf(fl0, "%6d %6d %6d", m[i][4], m[i][5], m[i][6]);
+		fprintf(fl0, "%2d %2d \n", m0[i][1], m0[i][2]);
+		fprintf(fl0, "%+2.4lf %+2.4lf %+2.4lf %+2.4lf %+2.4lf\n",
+			o[i][0], o[i][3], o[i][1], o[i][4], o[i][2]);
+	}  /*  i  */
+db02:;
+}
+
+/**************************************************/
+/* df24: displacement ratio and iteration drawing */
+/**************************************************/
+void df24()
+{
+	void fild();
+	void movl();
+	void dral();
+	void writ();
+	void dspl();
+	void clrs();
+	void shgp();
+	if (k6 == 1)  fprintf(fl0, "---24000--- \n");
+	/*------------------------------------------------*/
+	/* vertex displacements       i0 old block number */
+	pe = 1;
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1 - 1; j <= i2 + 1; j++)
+		{
+			x = d[j][1];
+			y = d[j][2];
+			i0 = i;
+			dspl();
+			/*------------------------------------------------*/
+			i3 = k2[i];
+			u[j][1] = 0;
+			u[j][2] = 0;
+			for (l = 1; l <= 6; l++)
+			{
+				u[j][1] += t[1][l] * z[i3][l];
+				u[j][2] += t[2][l] * z[i3][l];
+			}  /*  l  */
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* relative maximum displacement ratio            */
+	a1 = 0;
+	b1 = 0;
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		b2 = 0;
+		for (j = i1; j <= i2; j++)
+		{
+			a2 = sqrt(u[j][1] * u[j][1] + u[j][2] * u[j][2]);
+			if (a1 <= a2)  a1 = a2;
+			b2 += a2;
+		}  /*  j  */
+		b1 += b2 / (double)(i2 - i1 + 1);
+	}  /*  i  */
+	q0[nn][0] = (a1 / w0) / g2;
+	q0[nn][3] = (b1 / w0) / g2 / ((double)n1);
+	/**************************************************/
+	/* draw deformed blocks, change u[][]             */
+	/* iteration finished                             */
+	if (pp == 1 || m9 == -1) goto c401;
+	for (i = 1; i <= n3; i++)
+	{
+		for (j = 1; j <= 36; j++)
+		{
+			a[i][j] = b[i][j];
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			f[i][j] = r[i][j];
+		}  /*  j  */
+	}  /*  i  */
+	/**************************************************/
+	/* draw deformed blocks, change u[][]             */
+c401:;
+	clrs();
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1 - 1; j <= i2 + 1; j++)
+		{
+			u[j][1] += d[j][1];
+			u[j][2] += d[j][2];
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* fill colors for each block                     */
+#if 0 for (i = 1; i <= n1; i++)
+	{
+		fild(i);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	x8 = w[1] + .01 * w0;
+	y8 = w[4] - .05 * w0;
+	sprintf(aa, "step %5d -> %5d \0", nn, n5);
+	writ(x8, y8, pe, p0, aa, w);
+	/*------------------------------------------------*/
+	/* draw block boundary lines                      */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		x8 = u[i1][1];
+		y8 = u[i1][2];
+		movl(x8, y8, pe, p0, w);
+		for (j = i1; j <= i2 + 1; j++)
+		{
+			x9 = u[j][1];
+			y9 = u[j][2];
+			dral(x9, y9, pe, p0, w);
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* find open-close points  i0=1 open  i0=-1 close */
+	for (i = 1; i <= n2; i++)
+	{
+		j8 = m0[i][1];
+		if (j8 > 0)  j8 = 1;
+		j9 = m0[i][2];
+		if (j9 > 0)  j9 = 1;
+		i0 = j8 - j9;
+		if (i0 == 0) goto c403;
+		ji = m[i][1];
+		x = u[ji][1];
+		y = u[ji][2];
+		/*------------------------------------------------*/
+		/* draw open-close points                         */
+		jo = 6;
+		pe = 3;
+		if (i0 == 1) goto c402;
+		jo = 4;
+		pe = 4;
+	c402:;
+		r1 = .010 * w0;
+		x8 = x + r1;
+		y8 = y;
+		movl(x8, y8, pe, p0, w);
+		for (j = 1; j <= jo; j++)
+		{
+			x9 = x + r1 * cos((double)j * 360.0 * dd / (double)jo);
+			y9 = y + r1 * sin((double)j * 360.0 * dd / (double)jo);
+			dral(x9, y9, pe, p0, w);
+		}  /*  j  */
+	c403:;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* compute total maximum spring penetration w6    */
+	w6 = 0;
+	i1 = 0;
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][2] == 0) goto c404;
+		if (o[i][3] < w6) i1 = i;
+		if (o[i][3] < w6) w6 = o[i][3];
+	c404:;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* draw point with maximum contact force          */
+	if (i1 == 0) goto c405;
+	ji = m[i1][1];
+	x = u[ji][1];
+	y = u[ji][2];
+	jo = 6;
+	pe = 4;
+	r1 = .020 * w0;
+	x8 = x + r1;
+	y8 = y;
+	movl(x8, y8, pe, p0, w);
+	for (i = 1; i <= jo; i++)
+	{
+		x9 = x + r1 * cos((double)i * 360.0 * dd / (double)jo);
+		y9 = y + r1 * sin((double)i * 360.0 * dd / (double)jo);
+		dral(x9, y9, pe, p0, w);
+	}  /*  i  */
+c405:;
+#endif /**************************************************/
+	fprintf(fl0, "<<< step >>> %5d\n", nn);
+	fprintf(fl0, "iterate %3d %6d \n", m9, n9);
+	fprintf(fl0, "close point %6d \n", i7);
+	fprintf(fl0, "open  point %6d \n", i8);
+	if (m9 != -1) fprintf(fl0, "rel max ds %4.7f\n", q0[nn][0]);
+	if (m9 == -1) fprintf(fl0, "max. dspl. ratio %4.7f\n", q0[nn][0]);
+	fprintf(fl0, "average ds %4.7f\n", q0[nn][3]);
+	fprintf(fl0, "step  time %e\n", tt);
+	fprintf(fl0, "total time %e\n", q0[nn][1]);
+	/* fprintf(fl0,"sprin stif %lf  \n",hh); */
+	/*------------------------------------------------*/
+	// shgp(0);
+}
+
+/**************************************************/
+/* df25: compute step displacements               */
+/**************************************************/
+void df25()
+{
+	void dspl();
+	void area();
+	if (k6 == 1)  fprintf(fl0, "---25000--- \n");
+	/*------------------------------------------------*/
+	/* change to new deformed block shape  u[][] df24 */
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		for (j = i1 - 1; j <= i2 + 1; j++)
+		{
+			x = d[j][1];
+			y = d[j][2];
+			i0 = i;
+			dspl();
+			x2 = t[2][3];
+			y2 = -t[1][3];
+			t[1][3] = 0;
+			t[2][3] = 0;
+			/*------------------------------------------------*/
+			i3 = k2[i];
+			for (l = 1; l <= 6; l++)
+			{
+				d[j][1] += t[1][l] * z[i3][l];
+				d[j][2] += t[2][l] * z[i3][l];
+			}  /*  l  */
+			d[j][1] += x2 * (cos(z[i3][3]) - 1.0) - y2 * sin(z[i3][3]);
+			d[j][2] += y2 * (cos(z[i3][3]) - 1.0) + x2 * sin(z[i3][3]);
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* new coordinates for fixed measured load points */
+	for (i = 1; i <= nf + nl + nm; i++)
+	{
+		i0 = (long)g[i][3];
+		x = g[i][1];
+		y = g[i][2];
+		dspl();
+		i1 = k2[i0];
+		x1 = 0;
+		yi = 0;
+		/*------------------------------------------------*/
+		/* displacements of fixed measured load points    */
+		for (j = 1; j <= 6; j++)
+		{
+			x1 += t[1][j] * z[i1][j];
+			yi += t[2][j] * z[i1][j];
+		}  /*  j  */
+		g[i][1] += x1;
+		g[i][2] += yi;
+		c[i][1] += -x1;
+		c[i][2] += -yi;
+		c[i][3] += -z[i1][3];
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* fprintf(fl0,"block deformation and stress \n");
+	fprintf(fl0,"u0     v1      az \n");
+	fprintf(fl0,"ex     ey     gxy \n");
+	fprintf(fl0,"cx     cy     txy \n"); */
+	/*------------------------------------------------*/
+	/* compute updating stresses                      */
+	for (i = 1; i <= n1; i++)
+	{
+		a1 = e0[i][3] / (1 - e0[i][4] * e0[i][4]);
+		i1 = k2[i];
+		e0[i][5] += a1 * (z[i1][4] + z[i1][5] * e0[i][4]);
+		e0[i][6] += a1 * (z[i1][4] * e0[i][4] + z[i1][5]);
+		e0[i][7] += a1 * z[i1][6] * (1 - e0[i][4]) / 2;
+		/*------------------------------------------------*/
+		f[i][7] += z[i1][4];
+		f[i][8] += z[i1][5];
+		f[i][9] += z[i1][6];
+		/*------------------------------------------------*/
+		/* print block deformations and stresses          */
+		if (0 == 0) goto db03;
+		fprintf(fl0, "block no: %d \n", i);
+		fprintf(fl0, "%lf %lf %lf  \n", z[i1][1], z[i1][2], z[i1][3]);
+		fprintf(fl0, "%lf %lf %lf  \n", z[i1][4], z[i1][5], z[i1][6]);
+		fprintf(fl0, "%lf %lf %lf  \n", e0[i][5], e0[i][6], e0[i][7]);
+		/*------------------------------------------------*/
+	db03:;
+	}  /*  i  */
+	/**************************************************/
+	/* updating velocity for dynamics                 */
+	/* o0: total volume              o1: unit inertia */
+	/* o2: total inertia force of measured blocks     */
+	o0 = 0;
+	o1 = 0;
+	o2 = 0;
+	for (i = 1; i <= n1; i++)
+	{
+		a1 = v0[i][1] * gg;
+		a2 = v0[i][2] * gg;
+		o0 += h0[i][1];
+		i1 = k2[i];
+		for (j = 1; j <= 6; j++)
+		{
+			v0[i][j] = 2 * z[i1][j] / tt - v0[i][j] * gg;
+		}  /*  j  */
+		a1 = (v0[i][1] - a1) / tt;
+		a2 = (v0[i][2] - a2) / tt;
+		a3 = h0[i][1] * e0[i][0] * sqrt(a1 * a1 + a2 * a2);
+		o1 += a3;
+		if (n[i][0] == 1) o2 += a3;
+	}  /*  i  */
+	o1 /= o0;
+	fprintf(fl0, "=====unit inert %lf ===== \n", o1);
+	/* printf("unit inert %lf  \n",o1);               */
+	/**************************************************/
+	/* factor of safty ff                             */
+	/* o2: sliding force          o0: resistant force */
+	o0 = 0;
+	o2 += .0000000001;
+	for (i = 1; i <= n2; i++)
+	{
+		l1 = m[i][1];
+		l2 = m[i][2];
+		i1 = n0[l1];
+		i2 = n0[l2];
+		if (n[i1][0] == 0 && n[i2][0] == 0) goto c503;
+		if (n[i1][0] == 1 && n[i2][0] == 1) goto c503;
+		/*------------------------------------------------*/
+		i0 = m1[i][0];
+		t1 = b0[i0][0];
+		t2 = b0[i0][1] * o[i][5];
+		/*------------------------------------------------*/
+		if (m[i][0] == 1) goto c503;
+		if (m0[i][2] == 0) goto c503;
+		if (m0[i][2] == 1) goto c502;
+		if (m0[i][2] == 2) goto c501;
+		/*------------------------------------------------*/
+		/* normal spring and shear spring                 */
+	c501:;
+		e1 = 0;
+		if (m0[i][0] == 2)  e1 = t2;
+		a2 = tan(dd * t1);
+		if (o[i][3] > 0)  a2 = 0;
+		o0 += fabs(o[i][3]) * a2 * hh + e1;
+		o2 += fabs(o[i][4]) * hh / h2;
+		goto c503;
+		/*------------------------------------------------*/
+		/* normal spring and friction force               */
+	c502:;
+		a2 = tan(dd * t1);
+		if (o[i][3] > 0)  a2 = 0;
+		o0 += fabs(o[i][3]) * a2 * hh;
+		o2 += fabs(o[i][3]) * a2 * hh;
+	c503:;
+	}  /*  i  */
+	ff = o0 / o2;
+	fprintf(fl0, "fs= %lf  \n", ff);
+	/* printf("fs= %lf  \n",ff);                     */
+	/*------------------------------------------------*/
+	/* compute s sx sy sxx syy sxy    g0 of this step */
+	area();
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* df26: draw deformed blocks                     */
+/**************************************************/
+void df26()
+{
+	void fill();
+	void movl();
+	void dral();
+	void area();
+	void writ();
+	void clrs();
+	void shgp();
+	if (k6 == 1)  fprintf(fl0, "---26000--- \n");
+	/*------------------------------------------------*/
+	/* fill block with color                          */
+	a1 = (double)nn / m4;
+	a2 = a1 - (double)floor(a1 + .000001);     if (a2 < .000001) {
+		clrs();
+		for (i = 1; i <= n1; i++)
+		{
+			fill(i);
+		}  /*  i  */
+	/*------------------------------------------------*/
+		x8 = w[1] + .01 * w0;
+		y8 = w[4] - .05 * w0;
+		sprintf(aa, "step %5d -> %5d \0", nn, n5);
+		writ(x8, y8, 1, p0, aa, w);
+		/*------------------------------------------------*/
+		/* draw block boundary lines                      */
+		pe = 1;
+		for (i = 1; i <= n1; i++)
+		{
+			i1 = k0[i][1];
+			i2 = k0[i][2];
+			x8 = d[i1][1];
+			y8 = d[i1][2];
+			movl(x8, y8, pe, p0, w);
+			for (j = i1; j <= i2 + 1; j++)
+			{
+				x9 = d[j][1];
+				y9 = d[j][2];
+				dral(x9, y9, pe, p0, w);
+			}  /*  j  */
+		}  /*  i  */
+		/*------------------------------------------------*/
+		/* write block numbers on center of gravity     d */
+		for (i = 1; i <= n1; i++)
+		{
+			pe = i % 4 + 1;
+			x8 = h0[i][2] / h0[i][1];
+			y8 = h0[i][3] / h0[i][1];
+			i8 = i % 10;
+			sprintf(aa, "%d\0", i8);
+			if (nn == 0) writ(x8, y8, pe, p0, aa, w);
+			x2 = x8;
+			y2 = y8;
+			for (j = k0[i][1]; j <= k0[i][2]; j++)
+			{
+				x1 = d[j][1];
+				yi = d[j][2];
+				x8 = .8 * x1 + .2 * x2;
+				y8 = .8 * yi + .2 * y2;
+				i8 = j;
+				sprintf(aa, "%d\0", i8);
+				/* writ(x8, y8, pe, p0, aa, w); */
+			}  /*  j  */
+		}  /*  i  */
+		shgp(0);
+	}/*------------------------------------------------*/
+	/* draw fixed measured load points      time step */
+	pe = 4;
+
+	
+	if (nn > 0)
+	{
+		for (i = 1; i <= n2; i++)
+		{
+			if (m0[i][0] == 2 && m0[i][2] == 0)
+				fprintf(f1failure, "%ld   %ld   %ld   %ld\n", m[i][1], m[i][4], 0, nn);
+			if (m0[i][0] == 2 && m0[i][2] == 1)  // < m0[i][3]
+				fprintf(f1failure, "%ld   %ld   %ld   %ld\n", m[i][1], m[i][4], 1, nn);
+
+		}
+	}
+
+	if (nn > 0)
+	{
+		for (i = nf + nl + 1; i <= nf + nl + nm; i++)
+		{
+			i1 = i - nf - nl;
+			i2 = (long)g[i][3];
+			x8 = -c[i][1];
+			y8 = -c[i][2];
+			r1 = -c[i][3];
+			fprintf(fl3, "%e   %e   %e       %e   %e   %e\n", x8, y8, r1, e0[i2][5], e0[i2][6], e0[i2][7]);
+		}  /*  i  */
+		fprintf(fl3, "%e %e %e \n", q0[nn][0], q0[nn][1], q0[nn][2]);
+	}
+
+	/*sprintf(aa,"step%d.rst",nn);
+	f116=fopen(aa,"w");
+	for(i=1;i<=n1; i++)
+	  {
+
+		  for(j=1;j<=6; j++)
+		  {
+				  fprintf(f116,"%11.10lf ",z[i][j]);
+		  }
+		  fprintf(f116,"\n");
+	  }
+	  fclose(f116); 	*/
+	  /*sprintf(aa,"step%d.pt",nn);
+	  f116=fopen(aa,"w");*/
+#if 0 for (i = 1; i <= nf + nl + nm; i++)
+	{
+		r1 = .004 * w0;
+		x8 = g[i][1] + r1;
+		y8 = g[i][2];
+		// fprintf(f116,"%11.10lf %11.10lf\n",g[i][1],g[i][2]);	
+		movl(x8, y8, pe, p0, w);
+		for (j = 1; j <= 12; j++)
+		{
+			x9 = g[i][1] + r1 * cos(j * 30 * dd);
+			y9 = g[i][2] + r1 * sin(j * 30 * dd);
+			dral(x9, y9, pe, p0, w);
+		}  /*  j  */
+	}  /*  i  */
+	//fclose(f116);
+	/*------------------------------------------------*/
+	/* draw movements of fixed measured load points   */
+	for (i = 1; i <= nf + nl + nm; i++)
+	{
+		x8 = g[i][1];
+		y8 = g[i][2];
+		movl(x8, y8, pe, p0, w);
+		x9 = g[i][1] + c[i][1];
+		y9 = g[i][2] + c[i][2];
+		dral(x9, y9, pe, p0, w);
+	}  /*  i  */
+#endif /**************************************************/
+	/* judge graphic output for current time step     */
+	if (nn == 0 || nn == n5) goto c601;
+	a1 = (double)nn / m4;
+	a2 = a1 - (double)floor(a1 + .000001);
+	if (a2 > .000001) goto c602;
+	/*------------------------------------------------*/
+	/* output step block geometry                     */
+c601:;
+	for (i = 1; i <= oo; i++)
+	{
+		fprintf(fl3, "%e %e \n", d[i][1], d[i][2]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* output movements of fixed measured load points */
+	for (i = 1; i <= nf + nl + nm; i++)
+	{
+		fprintf(fl3, "%e %e %e\n", g[i][1], g[i][2], g[i][3]);
+		fprintf(fl3, "%e %e    \n", c[i][1], c[i][2]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* output movements of measured points            */
+	for (i = nf + nl + 1; i <= nf + nl + nm; i++)
+	{
+		i1 = i - nf - nl;
+		i2 = (long)g[i][3];
+		x8 = -c[i][1];
+		y8 = -c[i][2];
+		r1 = -c[i][3];
+		fprintf(fl0, "measured p=%d block=%d u=%lf v=%lf r=%lf \n", i1, i2, x8, y8, r1);
+		fprintf(fl0, "cx=%lf  cy=%lf  cxy=%lf \n", e0[i2][5], e0[i2][6], e0[i2][7]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* output stresses of blocks                  */ 
+	for (i = 1; i <= n1; i++)
+	{
+		fprintf(f1stress, "%e %e %e \n", e0[i][5], e0[i][6], e0[i][7]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* output for back ward analysis                  */
+	fprintf(fl0, "for back ward analysis time   u  v  of f m points \n");
+	for (i = 1; i <= nf + nl + nm; i++)
+	{
+		x8 = -c[i][1];
+		y8 = -c[i][2];
+		if (i <= nf || i > nf + nl)
+			fprintf(fl0, "%lf   %lf   %lf \n", 0.0, 0.0, 0.0);
+		if (i <= nf || i > nf + nl)
+			fprintf(fl0, "%lf   %lf   %lf \n", 1.0, x8, y8);
+	}  /*  i  */
+	/*------------------------------------------------*/
+
+c602:;
+	/*------------------------------------------------*/
+	// shgp(0);
+}
+
+/**************************************************/
+/* df27: save results to file                     */
+/**************************************************/
+void df27()
+{
+	if (k6 == 1)  fprintf(fl0, "---27000--- \n");
+	/*------------------------------------------------*/
+	/* close graphic output text output     df02 df26 */
+	fprintf(fl0, "itereration %6d \n", n9);
+	for (i = 1; i <= n1; i++)
+	{
+		fprintf(fl3, "%lf %lf %lf \n", e0[i][5], e0[i][6], e0[i][7]);
+	}  /*  i  */
+	fclose(fl0);
+	fclose(fl3);
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* dspl: block displacement matrix                */
+/**************************************************/
+/* x10  y10  u2  v2  t[][]               i0  x  y */
+void dspl()
+{
+	/*------------------------------------------------*/
+	/* i0 is old block number                         */
+	/* x10,y10:center of gravity of the block         */
+	x10 = h0[i0][2] / h0[i0][1];
+	y10 = h0[i0][3] / h0[i0][1]; 
+	/*------------------------------------------------*/
+	u2 = x - x10; 
+	v2 = y - y10;  
+	t[1][1] = 1;
+	t[2][1] = 0;
+	t[1][2] = 0;
+	t[2][2] = 1;
+	t[1][3] = -v2;
+	t[2][3] = u2;
+	t[1][4] = u2;
+	t[2][4] = 0;
+	t[1][5] = 0;
+	t[2][5] = v2;
+	t[1][6] = v2 / 2;
+	t[2][6] = u2 / 2;
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* invr: inverse of 6*6 matrix                    */
+/**************************************************/
+/* jj  j  l  l1  e[][]  q[][]                     */
+void invr()
+{
+	/*------------------------------------------------*/
+	/* E=I as n=6 free term colomns                   */
+	for (j = 1; j <= 6; j++)
+	{
+		for (l = 1; l <= 6; l++)
+		{
+			e[j][l] = 0; 
+		}  /*  l  */
+		e[j][j] = 1;  
+	}  /*  j  */
+	/*------------------------------------------------*/
+	/* L_ij = A_ij - S_(k=1)^j-1 L_ik L_kk^-1 L_jk^T  */
+	for (j = 1; j <= 6; j++)
+	{
+		for (l = 1; l <= j; l++)
+		{
+			for (l1 = 1; l1 <= l - 1; l1++)
+			{
+				q[j][l] += -q[j][l1] * q[l][l1] / q[l1][l1];  
+			}  /*  l1 */
+		}  /*  l  */
+	}  /*  j  */
+	/*------------------------------------------------*/
+	/* Y_i = L_ii^-1 (F_i - S_k=1^i-1 L_ik Y_k)  back */
+	for (jj = 1; jj <= 6; jj++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			for (l = 1; l <= j - 1; l++)
+			{
+				e[j][jj] += -q[j][l] * e[l][jj];
+			}  /*  l  */
+			e[j][jj] /= q[j][j]; 
+		}  /*  j  */
+	}  /*  jj */
+	/*------------------------------------------------*/
+	/* X_i = Y_i - S_(k=i+1)^n L_ii^(-1) L_ki^T X_k   */
+	for (jj = 1; jj <= 6; jj++)
+	{
+		for (j = 5; j >= 1; j--)
+		{
+			for (l = j + 1; l <= 6; l++)
+			{
+				e[j][jj] += -q[l][j] * e[l][jj] / q[j][j]; 
+			}  /*  l  */
+		}  /*  j  */
+	}  /*  jj */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* mult: muliplication of 6*6 matrices            */
+/**************************************************/
+/* l1  l2  l3  t[][]  q[][]                       */
+void mult()
+{
+	/*------------------------------------------------*/
+	for (l1 = 1; l1 <= 6; l1++)
+	{
+		for (l2 = 1; l2 <= 6; l2++)
+		{
+			t[l1][l2] = 0;
+			for (l3 = 1; l3 <= 6; l3++)
+			{
+				t[l1][l2] += q[l1][l3] * e[l3][l2];  
+			}  /*  l3 */
+		}  /*  l2 */
+	}  /*  l1 */
+	/*------------------------------------------------*/
+	for (l1 = 1; l1 <= 6; l1++)
+	{
+		for (l2 = 1; l2 <= 6; l2++)
+		{
+			q[l1][l2] = t[l1][l2];  
+		}  /*  l2 */
+	}  /*  l1 */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* cons: set control constants                    */
+/**************************************************/
+void cons()
+{
+	/*------------------------------------------------*/
+	/* pre-defined changeble constants                */
+	/* f0 : criteria of open to close                 */
+	/* h1 : angle overlapping degrees     for contact */
+	/* h2 : ratio for shear spring versus normal one  */
+	/* h3 : coefficient of spring dspl to d0   dstn() */
+	/* h4 : coefficient of spring stiffness  g0=h4*em */
+	/* h5 : coefficient of spring invasion  d0 df04() */
+	h1 = 3;   //
+	h2 = 2.5; //h2*ks=kn
+	h3 = 1.1;
+	h4 = 40.0;//
+	h5 = 0.4;
+	/*------------------------------------------------*/
+	/* d0 :  normal external    distance for contact  */
+	/* d0*.4 normal penetration distance for contact  */
+	/* this is unsed alternative define d0 by w1 w2   */
+	d9 = 2.5 * w0 * g2;
+	a1 = w2 / h5;
+	if (a1 > w1)  a1 = w1;
+	a1 /= 7.50;
+	/* fprintf(fl0,"### d0-in: %lf d0-ge %lf ### \n",d9,a1);
+	fprintf(fl0,"### d0-in: %lf d0-ge %lf ### \n",d9,a1); */
+	if (d9 < a1) d9 = a1; 
+	d0 = d9;
+	/*------------------------------------------------*/
+	/* define d0 from fixed rate f2 of w0             */
+	/* g2 d0 small penetration h5d0 & d0 same h5 .3-1 */
+	f2 = .0004;
+	d0 = 2.5 * w0 * g2;
+	h5 = 0.3;
+	a1 = 0.3 * d0;
+	if (a1 < 3.0 * f2 * w0) { a1 = 3.0 * f2 * w0; h5 = a1 / d0; }
+	if (d0 < a1) { d0 = a1;        h5 = 1.0; }
+	/*------------------------------------------------*/
+co01:;
+	hh = g0;
+
+	hh1 = hh / averEdgeLen;  
+
+	a1 = 0;
+	for (i = 1; i <= nb; i++)
+	{
+		a1 += a0[i][3];
+	}  /*  i  */
+	a1 /= nb;
+	if (g0 < .00000000001)  hh = h4 * a1;
+	g6 = hh;
+	g7 = hh;
+	/*------------------------------------------------*/
+	f0 = .0000001;                             /* ??? */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* step: compute next time interval               */
+/**************************************************/
+/* compute tt                                     */
+void step()
+{
+	double L0, L1, L01;
+	/*------------------------------------------------*/
+	if (g1 < .00000000001) goto st03;
+	/* if (nn ==                 1) */
+	tt = g1;
+	if (nn > 1 && q0[nn - 1][0] > 1.1)  tt /= sqrt(q0[nn - 1][0]);
+	goto st02;
+	/*------------------------------------------------*/
+	/* body load       a1=g: (unit force)/(unit mass) */
+st03:;
+	if (nn > 1) goto st01;
+	a1 = 0;
+	for (i = 1; i <= nb; i++)
+	{
+		b1 = sqrt(a0[i][1] * a0[i][1] + a0[i][2] * a0[i][2]) / a0[i][0];
+		if (a1 < b1)  a1 = b1;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* point load per unit mass                       */
+	a2 = 0;
+	for (i = nf + 1; i <= nf + nl; i++)
+	{
+		for (j = k4[i][0]; j <= k4[i][1]; j++)
+		{
+			b1 = sqrt(u0[j][1] * u0[j][1] + u0[j][2] * u0[j][2]) / (w3 * a0[1][0]);
+			if (a2 < b1)  a2 = b1;
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* initial stresses as unit mass body force  a1=a */
+	a3 = 0;
+	for (i = 1; i <= nb; i++)
+	{
+		for (j = 5; j <= 7; j++)
+		{
+			b1 = fabs(a0[i][j]) / a0[i][0];
+			if (a3 < b1) a3 = b1;
+		}  /*  j  */
+	}  /*  i  */
+	a3 = 4 * a3 * sqrt(w3) / w3;
+	a1 = (a1 + a2 + a3) / 2;
+	/*------------------------------------------------*/
+	/* initial velocity                  a2: velocity */
+	a2 = 0;
+	for (i = 1; i <= nb; i++)
+	{
+		b1 = sqrt(a0[i][11] * a0[i][11] + a0[i][12] * a0[i][12] + a0[i][13] * a0[i][13]);
+		if (a2 < b1)  a2 = b1;
+	}  /*  i  */
+	/*------------------------------------------------*/
+	/* s=1/2*g*t*t             a1*t*t + a2*t + a3 = 0 */
+	a3 = -g2 * w0;
+	tt = (-a2 + sqrt(a2 * a2 - 4 * a1 * a3)) / (2 * a1);
+	goto st02;
+	/**************************************************/
+	/* body load       a1=g: (unit force)/(unit mass) */
+st01:;
+	a3 = 0;
+	for (i = nf + 1; i <= nf + nl; i++)
+	{
+		if (a3 < fabs(g[i][4])) a3 = fabs(g[i][4]);
+		if (a3 < fabs(g[i][5])) a3 = fabs(g[i][5]);
+	}  /*  i  */
+	a3 = a3 / (w3 * a0[1][0]);
+	a1 = w7 * hh / (w3 * a0[1][0]);
+	if (a1 < a3)  a1 = a3;
+	if (a1 == 0)  goto st02;
+	/*------------------------------------------------*/
+	a2 = q0[nn - 1][0] * g2 * w0 / tt;
+	if (gg < 0.1) a2 = 0;
+	a3 = -g2 * w0;
+	a9 = (-a2 + sqrt(a2 * a2 - 2 * a1 * a3)) / a1;
+
+	L0 = 10.0;  L1 = 10.0;
+	L01 = a1 * tt / (4 * a2) * (1.0 / L0 / L0 - 1) / L1 + 1;
+	if (a1 * tt / (4 * a2) > 10)
+		L01 = 1.0 / L0 / L0;
+
+	a1 = a1 * L01;
+	a9 = (-a2 + sqrt(a2 * a2 - 2 * a1 * a3)) / a1; 
+
+
+
+	if (a9 < 1.3 * tt) tt = a9;
+	if (a9 >= 1.3 * tt) tt = 1.3 * tt;
+	/*------------------------------------------------*/
+st02:;
+}
+
+/**************************************************/
+/* dstn: compute stiffness of contact spring      */
+/**************************************************/
+void dstn()
+{
+	/*------------------------------------------------*/
+	/* w6 max penetration                             */
+	w6 = 0;
+	w7 = 0;
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][2] == 0) goto ds01;
+		/*------------------------------------------------*/
+		b1 = o[i][3];
+		if (fabs(w6) < fabs(b1))  i2 = i;
+		if (fabs(w6) < fabs(b1))  w6 = b1;
+		if (w7 > o[i][3])  w7 = o[i][3];
+	ds01:;
+	}  /*  i  */
+	w7 = -w7;
+	/* fprintf(fl0,"wf/d0 %lf i %d \n",w6/d0,i2); */
+	/*------------------------------------------------*/
+	/* updating g0 hh by max penetration w6           */
+	if (g0 > .00000000001) goto ds02;
+	b1 = hh * fabs(w6 / w0) / f2 + 0.0000001;
+	if (b1 <= hh / 3.0)  b1 = hh / 3.0;
+	hh = b1;
+	/**************************************************/
+	/* in step penetration control iteration of w6    */
+	/* transfer o3 to o0 o1         transter o4 to o1 */
+ds02:;
+	for (i = 1; i <= n2; i++)
+	{
+		if (m0[i][2] == 0) o[i][0] = 0;
+		if (m0[i][2] == 0) o[i][1] = 0;
+		if (m0[i][2] == 1) o[i][0] = o[i][3];
+		if (m0[i][2] == 1) o[i][1] = 0;
+		if (m0[i][2] == 3) o[i][1] = o[i][3];
+		if (m0[i][2] == 3) o[i][0] = 0;
+		if (m0[i][2] == 2) o[i][0] = o[i][3];
+		if (m0[i][2] == 2) o[i][1] = o[i][4];
+	}  /*  i  */
+}
+
+/**************************************************/
+/* exti: extent 2-d integer arrays                */
+/**************************************************/
+void exti(ss, n7, n8, m7)
+long** ss;
+long n7, n8, m7;
+{
+	long** bb;
+	long i, j;
+	bb = (long**)malloc(sizeof(long*) * n7);
+	for (i = 0; i < n7; ++i)  bb[i] = (long*)malloc(sizeof(long) * n8);
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i)
+	{
+		for (j = 0; j < n8; ++j)
+		{
+			bb[i][j] = ss[i][j];
+		} /* j */
+	} /* i */
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i) free((char*)ss[i]);
+	free((char*)ss);
+	/*------------------------------------------------*/
+	ss = (long**)malloc(sizeof(long*) * m7);
+	for (i = 0; i < m7; ++i) ss[i] = (long*)malloc(sizeof(long) * n8);
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i)
+	{
+		for (j = 0; j < n8; ++j)
+		{
+			ss[i][j] = bb[i][j];
+		} /* j */
+	} /* i */
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i) free((char*)bb[i]);
+	free((char*)bb);
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* extd: extent 2-d double  arrays                */
+/**************************************************/
+void extd(ss, n7, n8, m7)
+double** ss;
+long n7, n8, m7;
+{
+	double** bb;
+	long i, j;
+	bb = (double**)malloc(sizeof(double*) * n7);
+	for (i = 0; i < n7; ++i) bb[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i)
+	{
+		for (j = 0; j < n8; ++j)
+		{
+			bb[i][j] = ss[i][j];
+		} /* j */
+	} /* i */
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i) free((char*)ss[i]);
+	free((char*)ss);
+	/*------------------------------------------------*/
+	ss = (double**)malloc(sizeof(double*) * m7);
+	for (i = 0; i < m7; ++i) ss[i] = (double*)malloc(sizeof(double) * n8);
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i)
+	{
+		for (j = 0; j < n8; ++j)
+		{
+			ss[i][j] = bb[i][j];
+		} /* j */
+	} /* i */
+	/*------------------------------------------------*/
+	for (i = 0; i < n7; ++i) free((char*)bb[i]);
+	free((char*)bb);
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* area: compute s0 sx sy sxx syy sxy             */
+/**************************************************/
+/* i  j  x2  y2  x3  y3  h0[][]                   */
+void area()
+{
+	/*------------------------------------------------*/
+	for (i = 1; i <= n1; i++)
+	{
+		for (j = 1; j <= 6; j++)
+		{
+			h0[i][j] = 0;
+		}  /*  j  */
+		/*------------------------------------------------*/
+		/* x1=0  y1=0 here                                */
+		for (j = k0[i][1]; j <= k0[i][2]; j++)
+		{
+			x2 = d[j][1];
+			y2 = d[j][2];
+			x3 = d[j + 1][1];
+			y3 = d[j + 1][2];
+			/*------------------------------------------------*/
+			s0 = (x2 * y3 - x3 * y2);    
+			h0[i][1] += s0 / 2;             
+			h0[i][2] += s0 * (0 + x2 + x3) / 6;   
+			h0[i][3] += s0 * (0 + y2 + y3) / 6;  
+			h0[i][4] += s0 * (x2 * x2 + x3 * x3 + x2 * x3) / 12; 
+			h0[i][5] += s0 * (y2 * y2 + y3 * y3 + y2 * y3) / 12; 
+			h0[i][6] += s0 * (2 * x2 * y2 + 2 * x3 * y3 + x2 * y3 + x3 * y2) / 24; 
+		}  /*  j  */
+	}  /*  i  */
+	/*------------------------------------------------*/
+	for (i = 1; i <= n1; i++)
+	{
+		if (h0[i][1] < .0000000000000001)
+			fprintf(fl0, "minus area block=%d area=%lf \n", i, h0[i][1]);
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* angl: material constants of bolts              */
+/**************************************************/
+/* i  x1  y1  c1  d1  d2  d3  i1  i2  u[][]       */
+void angl()
+{
+	/*------------------------------------------------*/
+	for (i = 1; i <= n1; i++)
+	{
+		i1 = k0[i][1];
+		i2 = k0[i][2];
+		/*------------------------------------------------*/
+		/* u[j][1]: direction angle of edge j j+1         */  
+		for (j = i1 - 1; j <= i2; j++)
+		{
+			x1 = d[j + 1][1] - d[j][1];
+			yi = d[j + 1][2] - d[j][2];
+			c1 = fabs(x1) + .0000001;
+			d1 = atan(yi / c1) / dd;
+			if (x1 < 0)  d1 = 180 - d1;
+			if (d1 < 0)  d1 += 360;
+			u[j][1] = d1;
+		}  /*  j  */
+		u[i2 + 1][1] = u[i1][1];      
+		/*------------------------------------------------*/
+		/* u[j][2]: angle j                               */  
+		for (j = i1; j <= i2; j++)
+		{
+			d1 = u[j][1];
+			d2 = u[j - 1][1] - 180;
+			if (d2 < 0)  d2 += 360;
+			d3 = d2 - d1;
+			if (d3 < 0)  d3 += 360;
+			u[j][2] = d3;
+		}  /*  j  */
+		u[i1 - 1][2] = u[i2][2];
+		u[i2 + 1][2] = u[i1][2];
+	}  /*  i  */
+	/*------------------------------------------------*/
+}
+
+
+void dist()
+{
+	double x4, y4;
+	double t1;
+	t1 = (x1 - x2) * (x3 - x2) + (yi - y2) * (y3 - y2);
+	t1 /= ((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2));
+	if (t1 <= 0.0)  t1 = 0;
+	if (t1 >= 1.0)  t1 = 1;
+	x4 = x2 + t1 * (x3 - x2);
+	y4 = y2 + t1 * (y3 - y2);   
+	d5 = sqrt((x4 - x1) * (x4 - x1) + (y4 - yi) * (y4 - yi));
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* proj: projection of a edge to other edge       */
+/**************************************************/
+/* i  i0   i1  i2  i3  i4  d1  o[][5]  d  m0[][2] */
+/* j l d1 i0 s[] x1 y1 x2 y2 x3 y3                */
+void proj()
+{
+	void movl();
+	void dral();
+	/*------------------------------------------------*/
+	/* compute projection of p1 and p4 to edge p2p3   */
+	x1 = d[i1][1];
+	yi = d[i1][2]; 
+	x2 = d[i2][1];
+	y2 = d[i2][2];
+	x3 = d[i3][1];
+	y3 = d[i3][2]; 
+	/*------------------------------------------------*/
+	/* contact point o[][2]  s[1-4] par p1-p4 to p2p3 */
+	/* k[i]=1 transfer contact point m0[][0]=1 record */
+	d1 = ((x3 - x2) * (x3 - x2) + (y3 - y2) * (y3 - y2) + .000000001 * w0); 
+	s[1] = ((x1 - x2) * (x3 - x2) + (yi - y2) * (y3 - y2)) / d1;   
+	if (k[i] == 0)  o[i][2] = s[1]; 
+	if (k[i] == 1 && m0[i][0] == 0)  m0[i][0] = 1; 
+	s[2] = 0;
+	s[3] = 1;
+	/*------------------------------------------------*/
+	if (i4 == 0) goto pr02;
+	x1 = d[i4][1];
+	yi = d[i4][2];
+	s[4] = ((x1 - x2) * (x3 - x2) + (yi - y2) * (y3 - y2)) / d1; 
+	/*------------------------------------------------*/
+	/* ordering p1 p2 p3 p4 on edge p2p3              */
+	for (j = 1; j <= 3; j++)
+	{
+		for (l = j + 1; l <= 4; l++)
+		{
+			if (s[j] <= s[l]) goto pr01;
+			s[0] = s[j];
+			s[j] = s[l];
+			s[l] = s[0]; 
+		pr01:;
+		}  /*  l  */
+	}  /*  j  */
+	/*------------------------------------------------*/
+	/* o[][5] 1/2 co-edge lock length                 */
+	o[i][5] += .5 * (s[3] - s[2]) * sqrt(d1); 
+	/**************************************************/
+	/* draw co-edge or lock tension length            */
+	if (m0[i][0] != 2)  goto pr02;
+	s[5] = .5 * (s[2] + s[3]);  
+	pe = 3;
+	x8 = d[i1][1];
+	y8 = d[i1][2]; 
+	movl(x8, y8, pe, p0, w);
+	x9 = (1 - s[5]) * d[i2][1] + s[5] * d[i3][1];
+	y9 = (1 - s[5]) * d[i2][2] + s[5] * d[i3][2];
+	dral(x9, y9, pe, p0, w);
+	/*------------------------------------------------*/
+pr02:;
+}
+
+/**************************************************/
+/* mblo: material constants of blocks             */
+/**************************************************/
+void mblo()
+{
+	/*------------------------------------------------*/
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* mjoi: material constants of joints             */
+/**************************************************/
+void mjoi()
+{
+	/*------------------------------------------------*/
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* sign: return sign                              */
+/**************************************************/
+double sign(f2)
+double f2;
+{
+	if (f2 > 0) return (1);
+	if (f2 < 0) return (-1);
+	if (f2 == 0) return (0);
+}
+
+
+
+
+
+
+/**************************************************/
+/* graf: graph mode                               */
+/**************************************************/
+void graf(w)
+double w[12];
+{
+	sprintf(aa, "maxX=%4d maxY=%4d \0", maxX, maxY);
+	fprintf(fl0, "%s \n", aa);
+}
+
+/**************************************************/
+/* fill: fill blocks with colors                  */
+/**************************************************/
+void fill(k8)
+long k8;
+{
+	long l1, l2, k7, k6, k9;
+	k9 = k8 % 10 + 1;
+	SelectObject(memdc, hbrush[k9]);
+	k7 = k0[k8][1];
+	k6 = k0[k8][2] + 1;
+	/*------------------------------------------------*/
+	l2 = 0;
+	for (l1 = k6; l1 >= k7; l1--)
+	{
+		x7 = d[l1][1];
+		y7 = d[l1][2];
+		ix = floor((x7 - w[1]) / (w[3] - w[1]) * maxX);
+		iy = floor((w[4] - y7) / (w[4] - w[2]) * (maxY - maxY / 20.0));
+		vert[l2].x = ix;
+		vert[l2].y = iy;
+		/*------------------------------------------------*/
+		l2++;
+	} /* l1 */
+	Polygon(memdc, vert, l2);
+}
+
+/**************************************************/
+/* fild: fill blocks with colors                  */
+/**************************************************/
+void fild(k8)
+long k8;
+{
+	long l1, l2, k7, k6, k9;
+	k9 = k8 % 10 + 1;
+	SelectObject(memdc, hbrush[k9]);
+	k7 = k0[k8][1];
+	k6 = k0[k8][2] + 1;
+	/*------------------------------------------------*/
+	l2 = 0;
+	for (l1 = k6; l1 >= k7; l1--)
+	{
+		x7 = u[l1][1];
+		y7 = u[l1][2];
+		ix = floor((x7 - w[1]) / (w[3] - w[1]) * maxX);
+		iy = floor((w[4] - y7) / (w[4] - w[2]) * (maxY - maxY / 20.0));
+		vert[l2].x = ix;
+		vert[l2].y = iy;
+		/*------------------------------------------------*/
+		l2++;
+	} /* l1 */
+	Polygon(memdc, vert, l2);
+}
+
+/**************************************************/
+/* movl: move                                     */
+/**************************************************/
+void movl(x8, y8, k9, p0, w)
+double w[12];
+double x8, y8;
+long p0, k9;
+{
+	SelectObject(memdc, hpen[k9]);
+	ix = floor((x8 - w[1]) / (w[3] - w[1]) * maxX);
+	iy = floor((w[4] - y8) / (w[4] - w[2]) * (maxY - maxY / 20.0));
+	MoveToEx(memdc, ix, iy, NULL);
+}
+
+/**************************************************/
+/* dral: draw                                     */
+/**************************************************/
+void dral(x9, y9, k9, p0, w)
+double w[12];
+double x9, y9;
+long p0, k9;
+{
+	/*------------------------------------------------*/
+	/* change to red pen                              */
+	SelectObject(memdc, hpen[k9]);
+	/*------------------------------------------------*/
+	ix = floor((x8 - w[1]) / (w[3] - w[1]) * maxX);
+	iy = floor((w[4] - y8) / (w[4] - w[2]) * (maxY - maxY / 20.0));
+	MoveToEx(memdc, ix, iy, NULL);
+	ix = floor((x9 - w[1]) / (w[3] - w[1]) * maxX);
+	iy = floor((w[4] - y9) / (w[4] - w[2]) * (maxY - maxY / 20.0));
+	/*------------------------------------------------*/
+	/* show intersecting lines that define arc        */
+	LineTo(memdc, ix, iy);
+	/*------------------------------------------------*/
+	x8 = x9;
+	y8 = y9;
+}
+
+/**************************************************/
+/* writ: write charactors                         */
+/**************************************************/
+void writ(x8, y8, k9, p0, aa, w)
+double w[12];
+double x8, y8;
+char   aa[80];
+long k9, p0;
+{
+	ix = floor((x8 - w[1]) / (w[3] - w[1]) * maxX);
+	iy = floor((w[4] - y8) / (w[4] - w[2]) * (maxY - maxY / 20.0));
+	/**************************************************/
+	if (ic == 1)  SetTextColor(memdc, RGB(0, 225, 225));
+	if (ic == 1)  holdf = SelectObject(memdc, hnewf1);
+	/*------------------------------------------------*/
+	if (ic == 2)  SetTextColor(memdc, RGB(225, 0, 0));
+	if (ic == 2)  holdf = SelectObject(memdc, hnewf2);
+	TextOut(memdc, ix, iy, aa, strlen(aa));
+}
+
+/**************************************************/
+/* clrs: clear for new drawing                    */
+/**************************************************/
+void clrs()
+{
+	/*------------------------------------------------*/
+	hnewbrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
+	SelectObject(memdc, hnewbrush);
+	PatBlt(memdc, 0, 0, maxX, maxY, PATCOPY);
+	DeleteObject(hnewbrush);
+	/*------------------------------------------------*/
+	/* make blue brush                                */
+	hOldbrush = (HBRUSH)SelectObject(memdc, hbrush[2]);
+	hOldpen = (HPEN)SelectObject(memdc, hpen[1]);
+	/*------------------------------------------------*/
+}
+
+/**************************************************/
+/* shgp: flush window                             */
+/**************************************************/
+void shgp(p0)
+long p0;
+{
+	/*------------------------------------------------*/
+	/* return to default pen     select default brush */
+	SelectObject(memdc, hOldpen);
+	SelectObject(memdc, hOldbrush);
+	/*------------------------------------------------*/
+	/* delete green brush                             */
+	/* DeleteObject(hnewbrush); */
+	/*------------------------------------------------*/
+	BitBlt(hdc,
+		paintstruct.rcPaint.left,
+		paintstruct.rcPaint.top,
+		paintstruct.rcPaint.right - paintstruct.rcPaint.left,
+		paintstruct.rcPaint.bottom - paintstruct.rcPaint.top,
+		memdc,
+		paintstruct.rcPaint.left,
+		paintstruct.rcPaint.top,
+		SRCCOPY);
+	/**************************************************/
+}
+
+/**************************************************/
+/* sleep: pause seconds                           */
+/**************************************************/
+void sleep(i8)
+long i8;
+{
+	clock_t  start;
+	start = clock();
+	while (clock() - start < CLK_TCK * i8);
+}
+
+/**************************************************/
+/* DrawBlock()                                    */
+/**************************************************/
+void DrawBlock()
+{
+	void sleep();
+	/*------------------------------------------------*/
+	const POINT vertices[] = {
+		{410, 445},
+		{445, 410},
+		{495, 410},
+		{530, 445},
+		{530, 495},
+		{495, 530},
+		{445, 530},
+		{410, 495} };
+	/*------------------------------------------------*/
+	hnewbrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
+	SelectObject(memdc, hnewbrush);
+	PatBlt(memdc, 0, 0, maxX, maxY, PATCOPY);
+	DeleteObject(hnewbrush);
+	/*------------------------------------------------*/
+	/* make blue brush                                */
+	hOldbrush = (HBRUSH)SelectObject(memdc, hbrush[2]);
+	/*------------------------------------------------*/
+	/* fill these ellipses with blue                  */
+	Ellipse(memdc, 50, 200, 100, 280);
+	Ellipse(memdc, 75, 25, 280, 100);
+	/*------------------------------------------------*/
+	Polygon(memdc, vertices, 8);
+	/*------------------------------------------------*/
+	/* use a red pen and fill with green              */
+	SelectObject(memdc, hpen[0]);
+	/* DeleteObject(hnewbrush); */
+	/*------------------------------------------------*/
+	/* create green brush          select green brush */
+	SelectObject(memdc, hbrush[1]);
+	/*------------------------------------------------*/
+	/* draw ellipse                  draw a pie slice */
+	Ellipse(memdc, 100, 100, 200, 200);
+	Pie(memdc, 200, 200, 340, 340, 225, 200, 200, 250);
+	/*------------------------------------------------*/
+	/* return to default pen     select default brush */
+	SelectObject(memdc, hOldpen);
+	SelectObject(memdc, hOldbrush);
+	/*------------------------------------------------*/
+	/* delete green brush                             */
+	/* DeleteObject(hnewbrush); */
+	/*------------------------------------------------*/
+	BitBlt(hdc,
+		paintstruct.rcPaint.left,
+		paintstruct.rcPaint.top,
+		paintstruct.rcPaint.right - paintstruct.rcPaint.left,
+		paintstruct.rcPaint.bottom - paintstruct.rcPaint.top,
+		memdc,
+		paintstruct.rcPaint.left,
+		paintstruct.rcPaint.top,
+		SRCCOPY);
+	/*------------------------------------------------*/
+	/* InvalidateRect(hwnd, NULL, 1); */
+	sleep(1);
+}
+
+/**************************************************/
+/* DrawLines()                                    */
+/**************************************************/
+void DrawLines()
+{
+	void sleep();
+	/*------------------------------------------------*/
+	hnewbrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
+	SelectObject(memdc, hnewbrush);
+	PatBlt(memdc, 0, 0, maxX, maxY, PATCOPY);
+	DeleteObject(hnewbrush);
+	/*------------------------------------------------*/
+	/* set two pixels                                 */
+	SetPixel(memdc, 40, 14, RGB(0, 0, 0));
+	SetPixel(memdc, 40, 15, RGB(0, 0, 0));
+	/*------------------------------------------------*/
+	LineTo(memdc, 100, 50);
+	MoveToEx(memdc, 100, 50, NULL);
+	/*------------------------------------------------*/
+	/* change to green pen                            */
+	hOldpen = (HPEN)SelectObject(memdc, hpen[1]);
+	LineTo(memdc, 200, 100);
+	/*------------------------------------------------*/
+	/* change to yellow pen                           */
+	SelectObject(memdc, hpen[3]);
+	LineTo(memdc, 0, 200);
+	/*------------------------------------------------*/
+	/* change to blue pen                             */
+	SelectObject(memdc, hpen[2]);
+	LineTo(memdc, 200, 200);
+	/*------------------------------------------------*/
+	/* change to red pen                              */
+	SelectObject(memdc, hpen[0]);
+	LineTo(memdc, 0, 0);
+	/*------------------------------------------------*/
+	/* return to default pen                          */
+	SelectObject(memdc, hOldpen);
+	/*------------------------------------------------*/
+	/* show intersecting lines that define arc        */
+	Arc(memdc, 0, 0, 300, 300, 0, 50, 200, 50);
+	MoveToEx(memdc, 150, 150, NULL);
+	LineTo(memdc, 0, 50);
+	MoveToEx(memdc, 150, 150, NULL);
+	LineTo(memdc, 200, 50);
+	/**************************************************/
+	SetTextColor(memdc, RGB(0, 225, 225));
+	holdf = SelectObject(memdc, hnewf1);
+	ix = 400;
+	iy = 300;
+	sprintf(str, "position x=%d  y=%d  maxX=%d  maxY=%d",
+		ix, iy, maxX, maxY);
+	TextOut(memdc, ix, iy, str, strlen(str));
+	/*------------------------------------------------*/
+	SetTextColor(memdc, RGB(225, 0, 0));
+	holdf = SelectObject(memdc, hnewf2);
+	ix = 400;
+	iy = 400;
+	sprintf(str, "position x=%d  y=%d  maxX=%d  maxY=%d",
+		ix, iy, maxX, maxY);
+	TextOut(memdc, ix, iy, str, strlen(str));
+	/*------------------------------------------------*/
+	BitBlt(hdc,
+		paintstruct.rcPaint.left,
+		paintstruct.rcPaint.top,
+		paintstruct.rcPaint.right - paintstruct.rcPaint.left,
+		paintstruct.rcPaint.bottom - paintstruct.rcPaint.top,
+		memdc,
+		paintstruct.rcPaint.left,
+		paintstruct.rcPaint.top,
+		SRCCOPY);
+	/*------------------------------------------------*/
+	/* InvalidateRect(hwnd, NULL, 1); */
+	sleep(1);
+}
+
+/**************************************************/
+/* WindowFunc()                                   */
+/**************************************************/
+LRESULT CALLBACK WindowFunc(HWND 	hwnd,
+	UINT	    message,
+	WPARAM	wParam,
+	LPARAM	lParam)
+{
+	/*------------------------------------------------*/
+	/* PAINTSTRUCT    paintstruct; */
+	/* int            response; */
+	/*------------------------------------------------*/
+	/* Tells Windows We Want To Check The Message     */
+	switch (message)
+	{
+	case WM_CREATE:
+		/*------------------------------------------------*/
+		/* get screen coordinates                         */
+		maxX = GetSystemMetrics(SM_CXSCREEN);
+		maxY = GetSystemMetrics(SM_CYSCREEN);
+		/*------------------------------------------------*/
+		/* make a compatible memory image device          */
+		hdc = GetDC(hwnd);
+		memdc = CreateCompatibleDC(hdc);
+		hbit = CreateCompatibleBitmap(hdc, maxX, maxY);
+		SelectObject(memdc, hbit);
+		hnewbrush = (HBRUSH)GetStockObject(WHITE_BRUSH);
+		SelectObject(memdc, hnewbrush);
+		PatBlt(memdc, 0, 0, maxX, maxY, PATCOPY);
+		/*------------------------------------------------*/
+		/* create new brush                               */
+		hbrush[1] = CreateSolidBrush(RGB(0, 102, 102));
+		hbrush[2] = CreateSolidBrush(RGB(0, 102, 0));
+		hbrush[3] = CreateSolidBrush(RGB(0, 153, 0));
+		hbrush[4] = CreateSolidBrush(RGB(0, 204, 0));
+		hbrush[5] = CreateSolidBrush(RGB(0, 255, 0));
+		hbrush[6] = CreateSolidBrush(RGB(0, 255, 51));
+		hbrush[7] = CreateSolidBrush(RGB(0, 204, 102));
+		hbrush[8] = CreateSolidBrush(RGB(0, 153, 153));
+		hbrush[9] = CreateSolidBrush(RGB(0, 102, 204));
+		hbrush[10] = CreateSolidBrush(RGB(0, 51, 255));
+		/*------------------------------------------------*/
+		/* create new font                                */
+		hnewf1 = CreateFont(14 * maxX / 1600, 0, 0, 0, FW_NORMAL,
+			0, 0, 0, ANSI_CHARSET,
+			OUT_DEFAULT_PRECIS,
+			CLIP_DEFAULT_PRECIS,
+			DEFAULT_QUALITY,
+			DEFAULT_PITCH | FF_DONTCARE,
+			"Courier New");
+		/*------------------------------------------------*/
+		/* create new font                                */
+		hnewf2 = CreateFont(20 * maxX / 1600, 0, 0, 0, FW_SEMIBOLD,
+			0, 0, 0, ANSI_CHARSET,
+			OUT_DEFAULT_PRECIS,
+			CLIP_DEFAULT_PRECIS,
+			DEFAULT_QUALITY,
+			DEFAULT_PITCH | FF_DONTCARE,
+			"Century Gothic");
+		/*------------------------------------------------*/
+		/* pens  style: solid   width: 1 2        color:  */
+		hpen[1] = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
+		hpen[2] = CreatePen(PS_SOLID, 1, RGB(0, 225, 0));
+		hpen[3] = CreatePen(PS_SOLID, 1, RGB(0, 0, 225));
+		hpen[4] = CreatePen(PS_SOLID, 1, RGB(255, 0, 0));
+		hpen[5] = CreatePen(PS_SOLID, 2, RGB(225, 0, 225));
+		/*------------------------------------------------*/
+		/* safe default pen                               */
+		hOldpen = (HPEN)SelectObject(memdc, hpen[0]);
+		SelectObject(memdc, hOldpen);
+		/*------------------------------------------------*/
+		ReleaseDC(hwnd, hdc);
+		/*------------------------------------------------*/
+		break;
+		/**************************************************/
+		/* prcess a repaint request                       */
+	case WM_PAINT:
+		/*------------------------------------------------*/
+		/* get DC                                         */
+		/* hdc  = BeginPaint(hwnd, &paintstruct);         */
+		/*------------------------------------------------*/
+		/* DrawBlock(); */
+		/* DrawLines(); */
+		/* DrawBlock(); */
+		/* DrawLines(); */
+		/* InvalidateRect(hwnd, NULL, 1); */
+		/*------------------------------------------------*/
+		/* BitBlt(hdc, */
+		/*  paintstruct.rcPaint.left, */
+		/*  paintstruct.rcPaint.top, */
+		/*  paintstruct.rcPaint.right  - paintstruct.rcPaint.left, */
+		/*  paintstruct.rcPaint.bottom - paintstruct.rcPaint.top, */
+		/*  memdc, */
+		/*  paintstruct.rcPaint.left, */
+		/*  paintstruct.rcPaint.top,  */
+		/*  SRCCOPY); */
+		/*------------------------------------------------*/
+		/* release DC                                     */
+		/* EndPaint(hwnd, &paintstruct);                  */
+		break;
+		/**************************************************/
+		/* terminate the program              delete pens */
+	case WM_DESTROY:
+	case WM_CLOSE:
+		DeleteObject(hbrush[1]);
+		DeleteObject(hbrush[2]);
+		DeleteObject(hbrush[3]);
+		DeleteObject(hbrush[4]);
+		DeleteObject(hbrush[5]);
+		DeleteObject(hbrush[6]);
+		DeleteObject(hbrush[7]);
+		DeleteObject(hbrush[8]);
+		DeleteObject(hbrush[9]);
+		DeleteObject(hbrush[10]);
+		DeleteObject(hOldbrush);
+		/*------------------------------------------------*/
+		DeleteObject(hpen[1]);
+		DeleteObject(hpen[2]);
+		DeleteObject(hpen[3]);
+		DeleteObject(hpen[4]);
+		DeleteObject(hpen[5]);
+		DeleteObject(hOldpen);
+		/*------------------------------------------------*/
+		DeleteObject(hnewf1);
+		DeleteObject(hnewf2);
+		DeleteDC(memdc);
+		PostQuitMessage(0);
+		break;
+		/**************************************************/
+		/* any message not specified in preceding switch  */
+	default:
+		return DefWindowProc(hwnd, message, wParam, lParam);
+	}  /* switch */
+	return 0;
+}
+
+/**************************************************/
+/* WinMain()                                      */
+/**************************************************/
+int WINAPI WinMain(HINSTANCE	hThisInst,
+	HINSTANCE	hPrevInst,
+	LPSTR		lpszArgs,
+	int		nWinMode)
+{
+	/*------------------------------------------------*/
+	MSG		  msg; 	  /* Windows Message Structure  */
+	WNDCLASSEX  wcl;    /* Windows Class Structure    */
+	/* HACCEL   hAccel;  */
+	/*------------------------------------------------*/
+	void df01();
+	void df02();
+	void df03();
+	void df04();
+	void df05();
+	void df06();
+	void df07();
+	void di08();
+	void df08();
+	void df09();
+	void df10();
+	void df11();
+	void df12();
+	void df13();
+	void df14();
+	void df15();
+	void df16();
+	void df18();
+	void di20();
+	void df20();
+	void df21();
+	void df22();
+	void df24();
+	void df25();
+	void df26();
+	void df27();
+	void dstn();
+	void graf();
+	double sign();
+	long mi = 0;
+
+	/**************************************************/
+	/* df01: input geometric data                     */
+	/* df02: input physical data                      */
+	/* df26: draw deformed blocks                     */
+	/*------------------------------------------------*/
+	/* df03: mechanical parameters of blocks          */
+	/* df04: contact finding by distance criteria     */
+	/* df05: contact finding by angle criteria        */
+	/* df06: contact transfer                         */
+	/* df07: contact initialization                   */
+	/* df08: positions of non-zero storage            */
+	/* df08: block order                              */
+	/* df09: time interpolation                       */
+	/*------------------------------------------------*/
+	/* df10: initiate coefficient and load matrix     */
+	/* df11: submatrix of inertia                     */
+	/* df12: submatrix of fixed points                */
+	/* df13: submatrix of stifness                    */
+	/* df14: submatrix of initial stress              */
+	/* df15: submatrix of point loading               */
+	/* df16: submatrix of volume force                */
+	/*------------------------------------------------*/
+	/* df18: iteration start                          */
+	/* df18: add and subtract submatrix of contact    */
+	/* df20: triangle discomposition equation solver  */
+	/* df21: backward and forward substitution        */
+	/* df22: contact judge after iteration            */
+	/* df22: iteration output                         */
+	/* df24: displacement ratio and iteration drawing */
+	/*------------------------------------------------*/
+	/* df25: compute step displacements               */
+	/* df26: draw deformed blocks                     */
+	/* df27: save results to file                     */
+	/*------------------------------------------------*/
+	/* dspl: block displacement matrix                */
+	/* invr: inverse of 6*6 matrix                    */
+	/* mult: muliplication of 6*6 matrices            */
+	/* sign: return sign                              */
+	/* cons: set control constants                    */
+	/* step: compute next time interval               */
+	/* near: compute contact distance                 */
+	/* exti: extent 2-d integer arrays                */
+	/* extd: extent 2-d double  arrays                */
+	/* area: compute s0 sx sy sxx syy sxy             */
+	/* dist: distance of a segment to a node          */
+	/* proj: projection of a edge to other edge       */
+	/* mblo: material constants of blocks             */
+	/* mjoi: material constants of joints             */
+	/* angl: material constants of bolts              */
+	clock_t start, finish;
+	double time;
+	start = clock();
+	/**************************************************/
+	/* Define a window class                   step 1 */
+	wcl.cbSize = sizeof(WNDCLASSEX);
+	/*------------------------------------------------*/
+	/* handle to this instance                        */
+	wcl.hInstance = hThisInst;
+	/*------------------------------------------------*/
+	/* window class name                              */
+	wcl.lpszClassName = szWinName;
+	/*------------------------------------------------*/
+	/* window function                                */
+	wcl.lpfnWndProc = WindowFunc;
+	/*------------------------------------------------*/
+	/* default style                                  */
+	wcl.style = 0;
+	/*------------------------------------------------*/
+	/* standard icon                                  */
+	wcl.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+	/*------------------------------------------------*/
+	/* small icon                                     */
+	wcl.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+	/*------------------------------------------------*/
+	/* cursor style                                   */
+	wcl.hCursor = LoadCursor(NULL, IDC_ARROW);
+	/*------------------------------------------------*/
+	/* main menu                                      */
+	wcl.lpszMenuName = NULL;            /* "MyMenu"; */
+	/*------------------------------------------------*/
+	/* no extra                                       */
+	wcl.cbClsExtra = 0;
+	/*------------------------------------------------*/
+	/* infomation needed                              */
+	wcl.cbWndExtra = 0;
+	/*------------------------------------------------*/
+	/* make the window white                          */
+	wcl.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+	/**************************************************/
+	/* register the window class               step 2 */
+	if (!RegisterClassEx(&wcl))  return 0;
+	/**************************************************/
+	maxX = GetSystemMetrics(SM_CXSCREEN);
+	maxY = GetSystemMetrics(SM_CYSCREEN);
+	/**************************************************/
+	/* window class registered, window created step 3 */
+	hwnd = CreateWindow(
+		/*------------------------------------------------*/
+		/* name of window class                           */
+		szWinName,
+		/*------------------------------------------------*/
+		/* Title Appearing At The Top Of The Window       */
+		"DDA Force",
+		/*------------------------------------------------*/
+		/* window style - normal                          */
+		WS_OVERLAPPEDWINDOW,
+		/*------------------------------------------------*/
+		/* The Position Of The Window On The Screen X     */
+		0,                              /* CW_USEDEFAULT, */
+		/*------------------------------------------------*/
+		/* The Position Of The Window On The Screen Y     */
+		0,                              /* CW_USEDEFAULT, */
+		/*------------------------------------------------*/
+		/* The Width Of The WIndow                        */
+		maxX,                           /* CW_USEDEFAULT, */
+		/*------------------------------------------------*/
+		/* The Height Of The WIndow                       */
+		maxY,                           /* CW_USEDEFAULT, */
+		/*------------------------------------------------*/
+		/* n0 parent window                               */
+		HWND_DESKTOP,
+		/*------------------------------------------------*/
+		/* no override of class menu                      */
+		NULL,
+		/*------------------------------------------------*/
+		/* handle of this instance of the program         */
+		hThisInst,
+		/*------------------------------------------------*/
+		/* no additional arguments                        */
+		NULL);
+	/**************************************************/
+	/* Display the window                      step 4 */
+	ShowWindow(hwnd, nWinMode);
+	UpdateWindow(hwnd);
+	/**************************************************/
+	/* call subroutings                               */
+	hdc = BeginPaint(hwnd, &paintstruct);
+	/**************************************************/
+	/* call subroutings            n9:total iteration */
+	nn = 0;
+	n9 = 0; 
+	df01();
+	df02();
+	graf(w);
+	df26();
+	/*------------------------------------------------*/
+	/* df03 set step time interval  contact stiffness */
+	/* pp=0 direct     variable g0 by penetration  f2 */
+	/* pp=1 iteration  variable g0 by penetration  f2 */
+
+	for (nn = 1; nn <= n5; nn++)
+	{
+		for (mi = 1; mi <= n2; mi++) o[mi][7] = o[mi][6];
+		df03();
+		df04();
+		df05();
+		df06();
+		df07();
+
+		//for (i = 1; i <= n2; i++)  m0[i][5] = m0[i][2];
+
+		if (pp == 0)  df08(); 
+		if (pp == 1)  di08(); 
+		k5 = 0;  //k5=1: m0[i][1]=m0[i][2]
+		/*------------------------------------------------*/
+		/* new time interval set k5=0 m0[i][1]=0     df10 */
+	a001:;
+		m9 = 0;   
+		//for (i = 1; i <= n2; i++)  m0[i][2] = m0[i][5];
+		df09();
+		df10();
+		df11();
+		df12();
+		df13();
+		df14();
+		df15();
+		df16();
+		/*------------------------------------------------*/
+		/* start open-close iteration  m9:step iterations */
+	a002:;
+		df18();
+		if (pp == 0)  df20();
+		if (pp == 0)  df21();
+		if (pp == 1)  di20();
+		/*------------------------------------------------*/
+		/* set open-close     k5=1:m0[i][1]=m0[i][2] df22 */
+		k5 = 1;
+		m9 += 1;
+		n9 += 1;
+		df22();
+		df24();
+		/*------------------------------------------------*/
+		/* goto another open-close iteration              */
+		if (0 < m9 && m9 < 6) goto a002;  //if (0 < m9 && m9 < 6 && tt> 2e-8) goto a002;
+		/*------------------------------------------------*/
+		/* after 6 interations reduce time interval to .3 */
+		if (m9 == 6) { tt *= .3;            goto a001; }
+		/*------------------------------------------------*/
+		/* displacement ratio > 2.0 reduce time interval  */
+		if (q0[nn][0] > 2.0) { tt /= sqrt(q0[nn][0]); goto a001; }
+		/*------------------------------------------------*/
+		/* vari g0  penetration control   w6 <= 2.5*w0*f2 */
+		dstn();
+		/* if (f2*2.50*w0 < fabs(w6))  goto a001; */
+		/*------------------------------------------------*/
+
+		 /*sprintf(aa,"z_mtrx%d_%d.dat",n9,nn);
+		f116=fopen(aa,"w");
+		for(i=1;i<=n1; i++)
+		  {
+
+			  for(j=1;j<=6; j++)
+			  {
+					  fprintf(f116,"%11.10lf ",z[i][j]);
+			  }
+			  fprintf(f116,"\n");
+		  }
+		  fclose(f116);	*/
+		df25();
+		df26();
+		finish = clock();
+		time = (double)(finish - start) / CLOCKS_PER_SEC;
+		fprintf(fl9, "%e %e %e %lf %ld\n", q0[nn][0], q0[nn][1], q0[nn][2], time, n9);
+		fflush(f1failure); fflush(fl0); fflush(fl3); fflush(f1stress);
+	}   /* nn */
+	/*------------------------------------------------*/
+	nn = n5;
+	fclose(fl0); 	fclose(fl3);	fclose(f1stress); 	fclose(f1failure); 
+
+	/**************************************************/
+	EndPaint(hwnd, &paintstruct);
+	/* InvalidateRect(hwnd, NULL, 1); */
+	/**************************************************/
+	/* create message loop       process all messages */
+	/*while (GetMessage(&msg, NULL, 0, 0))
+	{
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+	}
+	/* KillTimer(hwnd, 1); */
+	/*return msg.wParam;
+	/*------------------------------------------------*/
+}
